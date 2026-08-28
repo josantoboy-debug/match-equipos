@@ -55,6 +55,20 @@
     document.body.appendChild(script);
   }
 
+  function loadEquipmentNewSession() {
+    if (window.EquipmentNewSession || document.querySelector('script[data-equipment-new-session]')) {
+      window.EquipmentNewSession?.install?.();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'equipment-new-session.js?v=dc7a2c1';
+    script.dataset.equipmentNewSession = '1';
+    script.async = false;
+    script.onload = () => window.EquipmentNewSession?.install?.();
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-new-session.js');
+    document.body.appendChild(script);
+  }
+
   function healthCheck() {
     const problems = [];
     if (!window.EquipmentRegistry) problems.push('EquipmentRegistry');
@@ -80,18 +94,21 @@
     normalizeNumericUAInput();
     guardQuantity();
     loadExportSummary();
+    loadEquipmentNewSession();
     setTimeout(healthCheck, 0);
   });
 
   document.addEventListener('operator:login', () => {
     restoreNativeAnchorClick();
     loadExportSummary();
+    loadEquipmentNewSession();
     setTimeout(healthCheck, 0);
   });
 
   window.MatchEquiposAuditFixes = {
     restoreNativeAnchorClick,
     healthCheck,
-    loadExportSummary
+    loadExportSummary,
+    loadEquipmentNewSession
   };
 })();
