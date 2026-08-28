@@ -36,16 +36,6 @@
     }, true);
   }
 
-  function loadUnifiedExport() {
-    if (window.UnifiedExport || document.querySelector('script[data-unified-export]')) return;
-    const script = document.createElement('script');
-    script.src = 'unified-export.js?v=72a89df';
-    script.dataset.unifiedExport = '1';
-    script.defer = true;
-    script.onerror = () => console.error('[match-equipos] No se pudo cargar unified-export.js');
-    document.body.appendChild(script);
-  }
-
   function healthCheck() {
     const problems = [];
     if (!window.EquipmentRegistry) problems.push('EquipmentRegistry');
@@ -70,19 +60,16 @@
     restoreNativeAnchorClick();
     normalizeNumericUAInput();
     guardQuantity();
-    loadUnifiedExport();
     setTimeout(healthCheck, 0);
   });
 
   document.addEventListener('operator:login', () => {
     restoreNativeAnchorClick();
-    loadUnifiedExport();
     setTimeout(healthCheck, 0);
   });
 
   window.MatchEquiposAuditFixes = {
     restoreNativeAnchorClick,
-    healthCheck,
-    loadUnifiedExport
+    healthCheck
   };
 })();
