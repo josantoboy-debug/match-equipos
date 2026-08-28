@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#090d14">
   <title>Verificación y Match de Equipos</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
   <link rel="stylesheet" href="file-index.css">
   <link rel="stylesheet" href="equipment-register.css">
@@ -23,7 +23,7 @@
 </header>
 
 <main class="app">
-  <section class="kpis">
+  <section class="kpis" aria-hidden="true" style="display:none!important">
     <div class="kpi"><span>Total registrados</span><strong id="kTotal">0</strong></div>
     <div class="kpi"><span>Carcasas</span><strong id="kCarcasas">0</strong></div>
     <div class="kpi"><span>Equipos</span><strong id="kEquipos">0</strong></div>
@@ -161,8 +161,9 @@
 <script src="operator-lock.js"></script>
 <script src="operator-counter-fix.js"></script>
 <script src="registry-export.js"></script>
-<script src="audit-fixes.js?v=a6d1296"></script>
+<script src="audit-fixes.js?v=19c315e"></script>
 <script src="equipment-entry-flow.js"></script>
 <script src="unified-export.js?v=870f693"></script>
+<script src="export-summary.js?v=1a4c24c"></script>
 </body>
 </html>
