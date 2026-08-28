@@ -72,8 +72,6 @@
     document.body.appendChild(link);
 
     try {
-      // Usa el método nativo de HTMLElement para evitar cualquier interceptor
-      // instalado sobre HTMLAnchorElement.prototype.click.
       HTMLElement.prototype.click.call(link);
     } finally {
       link.remove();
@@ -85,7 +83,7 @@
     nativeDownload(new Blob(['\uFEFF', text], {type: mime}), filename);
   }
 
-  function exportXlsx(rows, filename) {
+  function buildXlsxBlob(rows) {
     if (typeof XLSX === 'undefined') {
       throw new Error('El módulo Excel no está disponible. Recarga la página con conexión a internet.');
     }
@@ -97,7 +95,6 @@
     ];
     ws['!autofilter'] = {ref: ws['!ref'] || 'A1:I1'};
 
-    // Fuerza Serial y UA como texto para conservar ceros a la izquierda.
     Object.keys(ws).forEach(address => {
       if (address.startsWith('!')) return;
       const cell = ws[address];
@@ -115,13 +112,8 @@
     };
     XLSX.utils.book_append_sheet(wb, ws, 'Registro equipos');
 
-    // No usa XLSX.writeFile: genera el archivo en memoria y descarga con el
-    // método nativo para evitar conflictos con wrappers de terceros.
     const bytes = XLSX.write(wb, {bookType: 'xlsx', type: 'array', compression: true});
-    nativeDownload(
-      new Blob([bytes], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),
-      filename
-    );
+    return new Blob([bytes], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   }
 
   function exportRegistry() {
@@ -141,40 +133,45 @@
       return;
     }
 
-    const filename = exportName(format);
     button.disabled = true;
     const previousText = button.textContent;
     button.textContent = 'Descargando…';
 
     try {
+      // Primero construimos el contenido. El número REGISTRO #000 se reserva
+      // únicamente después de confirmar que el formato se puede generar.
+      let payload;
+      let mime = '';
+
       if (format === 'xlsx') {
-        exportXlsx(rows, filename);
+        payload = buildXlsxBlob(rows);
       } else if (format === 'json') {
-        downloadText(
-          JSON.stringify({
-            operador: operatorName(),
-            generado: new Date().toISOString(),
-            total: rows.length,
-            registros: rows
-          }, null, 2),
-          'application/json;charset=utf-8',
-          filename
-        );
+        payload = JSON.stringify({
+          operador: operatorName(),
+          generado: new Date().toISOString(),
+          total: rows.length,
+          registros: rows
+        }, null, 2);
+        mime = 'application/json;charset=utf-8';
       } else if (format === 'txt') {
         const headers = Object.keys(rows[0]);
-        const text = [
+        payload = [
           headers.join('\t'),
           ...rows.map(row => headers.map(header => String(row[header] ?? '')).join('\t'))
         ].join('\r\n');
-        downloadText(text, 'text/plain;charset=utf-8', filename);
+        mime = 'text/plain;charset=utf-8';
       } else {
         const headers = Object.keys(rows[0]);
-        const csv = [
+        payload = [
           headers.map(csvEscape).join(','),
           ...rows.map(row => headers.map(header => csvEscape(row[header])).join(','))
         ].join('\r\n');
-        downloadText(csv, 'text/csv;charset=utf-8', filename);
+        mime = 'text/csv;charset=utf-8';
       }
+
+      const filename = exportName(format);
+      if (format === 'xlsx') nativeDownload(payload, filename);
+      else downloadText(payload, mime, filename);
 
       window.OperatorSession?.saveNow?.();
       document.dispatchEvent(new CustomEvent('equipment:registry-exported', {
@@ -194,7 +191,6 @@
     const button = $('#equipmentExportBtn');
     if (!button) return;
 
-    // Captura antes del listener antiguo y evita dos descargas.
     button.addEventListener('click', event => {
       event.preventDefault();
       event.stopImmediatePropagation();
