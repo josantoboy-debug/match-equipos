@@ -68,7 +68,6 @@
     try {
       if (allFilter && activeFilter !== allFilter) allFilter.click();
       if (activeTab !== foundTab) foundTab.click();
-
       return $$('table tbody tr', workspace).map(row => {
         const cells = $$('td', row).map(td => textOf(td));
         if (cells.length < 6) return null;
@@ -158,24 +157,16 @@
     showToast('JSON exportado', `${filename} · ${rows.length} registros.`, 'ok');
   }
 
-  function runUnifiedExport() {
-    const selector = $('#globalExportFormat');
-    const button = $('#globalExportBtn');
-    if (!selector || !button) return;
-
-    const format = String(selector.value || 'xlsx').toLowerCase();
-    const previousText = button.textContent;
-    button.disabled = true;
-    button.textContent = 'Exportando…';
-
+  function runExport(format) {
+    const safeFormat = String(format || '').toLowerCase();
     try {
-      if (format === 'xlsx') {
+      if (safeFormat === 'xlsx') {
         const legacy = $('#exportBtn');
         if (!legacy) throw new Error('El exportador XLSX no está disponible.');
         legacy.click();
         return;
       }
-      if (format === 'txt') {
+      if (safeFormat === 'txt') {
         const legacy = $('#exportMatchesTxtBtn');
         if (!legacy) throw new Error('El exportador TXT no está disponible.');
         legacy.click();
@@ -183,67 +174,129 @@
       }
 
       const rows = buildRows();
-      if (format === 'csv') exportCsv(rows);
-      else if (format === 'json') exportJson(rows);
-      else throw new Error(`Formato no compatible: ${format}`);
+      if (safeFormat === 'csv') exportCsv(rows);
+      else if (safeFormat === 'json') exportJson(rows);
+      else throw new Error(`Formato no compatible: ${safeFormat}`);
     } catch (error) {
       console.error('[unified-export]', error);
       showToast('Error al exportar', error?.message || String(error), 'error');
-    } finally {
-      setTimeout(() => {
-        button.disabled = false;
-        button.textContent = previousText || 'Exportar';
-      }, 100);
     }
   }
 
-  function createControls() {
-    if ($('#globalExportBtn')) return true;
-    const txtButton = $('#exportMatchesTxtBtn');
-    const xlsxButton = $('#exportBtn');
-    const parent = xlsxButton?.parentElement || txtButton?.parentElement;
-    if (!parent || !txtButton || !xlsxButton) return false;
+  function ensureStyles() {
+    if ($('#operationalMenuStyles')) return;
+    const style = document.createElement('style');
+    style.id = 'operationalMenuStyles';
+    style.textContent = `
+      .operational-actions{position:relative;max-width:none!important}
+      .operational-actions > .mini-badge,
+      .operational-actions > #newSessionBtn,
+      .operational-actions > #importBtn,
+      .operational-actions > #exportMatchesTxtBtn,
+      .operational-actions > #exportBtn,
+      .operational-actions > .global-export-group{display:none!important}
+      .op-menu-wrap{position:relative;margin-left:auto}
+      .op-menu-trigger{width:36px;height:34px;display:grid;place-items:center;border:1px solid var(--line2);border-radius:9px;background:transparent;color:#c9d4e2;font-size:20px;line-height:1;cursor:pointer}
+      .op-menu-trigger:hover,.op-menu-trigger[aria-expanded="true"]{background:#162132;border-color:#426aa3;color:#fff}
+      .op-menu{position:absolute;right:0;top:calc(100% + 8px);z-index:60;width:210px;padding:7px;border:1px solid var(--line2);border-radius:12px;background:#0d1520;box-shadow:0 18px 45px rgba(0,0,0,.45)}
+      .op-menu[hidden],.op-export-panel[hidden]{display:none!important}
+      .op-menu button{width:100%;border:0;border-radius:8px;background:transparent;color:#dbe7f4;text-align:left;padding:10px 11px;font-size:10px;font-weight:750;cursor:pointer}
+      .op-menu button:hover{background:#182538}
+      .op-menu .danger{color:#fca5a5}
+      .op-menu-divider{height:1px;background:var(--line);margin:5px 2px}
+      .op-export-panel{display:grid;gap:5px;padding:4px 0 1px}
+      .op-export-title{padding:4px 11px 2px;color:#7f91a8;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+      .op-format-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+      .op-format-grid button{text-align:center;border:1px solid #2b3a50;background:#101a28;padding:9px 6px}
+      .op-format-grid button:hover{border-color:#4f8cff;background:#17315a}
+      @media(max-width:900px){.op-menu{right:-4px;width:200px}}
+    `;
+    document.head.appendChild(style);
+  }
 
-    txtButton.hidden = true;
-    xlsxButton.hidden = true;
-    txtButton.style.display = 'none';
-    xlsxButton.style.display = 'none';
+  function closeMenu() {
+    const menu = $('#operationalMenu');
+    const trigger = $('#operationalMenuBtn');
+    const panel = $('#operationalExportPanel');
+    if (menu) menu.hidden = true;
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    if (panel) panel.hidden = true;
+  }
 
-    if (!$('#unifiedExportStyles')) {
-      const style = document.createElement('style');
-      style.id = 'unifiedExportStyles';
-      style.textContent = `
-        .global-export-group{display:inline-flex;align-items:center;gap:6px}
-        .global-export-format{height:34px;min-width:78px;border:1px solid var(--line2);border-radius:9px;background:#0c141f;color:var(--text);padding:0 28px 0 9px;font-size:10px;font-weight:800;outline:none}
-        .global-export-format:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
-        .global-export-btn{min-width:92px}
-        @media(max-width:900px){.global-export-group{flex:1 1 220px}.global-export-format{flex:0 0 86px}.global-export-btn{flex:1}}
-      `;
-      document.head.appendChild(style);
-    }
+  function createMenu() {
+    const actions = $('.register-panel-head .operational-actions');
+    if (!actions) return false;
+    ensureStyles();
+    if ($('#operationalMenuBtn')) return true;
 
-    const group = document.createElement('div');
-    group.className = 'global-export-group';
-    group.setAttribute('aria-label', 'Exportar búsqueda y matches');
-    group.innerHTML = `
-      <select id="globalExportFormat" class="global-export-format" aria-label="Formato de exportación">
-        <option value="xlsx">XLSX</option>
-        <option value="txt">TXT</option>
-        <option value="csv">CSV</option>
-        <option value="json">JSON</option>
-      </select>
-      <button id="globalExportBtn" class="primary compact-action global-export-btn" type="button">Exportar</button>`;
+    const wrap = document.createElement('div');
+    wrap.className = 'op-menu-wrap';
+    wrap.innerHTML = `
+      <button id="operationalMenuBtn" class="op-menu-trigger" type="button" aria-label="Abrir acciones" aria-haspopup="menu" aria-expanded="false">⋯</button>
+      <div id="operationalMenu" class="op-menu" role="menu" hidden>
+        <button type="button" data-op-action="new" class="danger">Nueva sesión</button>
+        <button type="button" data-op-action="import">Importar archivo</button>
+        <button type="button" data-op-action="export">Exportar</button>
+        <div id="operationalExportPanel" class="op-export-panel" hidden>
+          <div class="op-menu-divider"></div>
+          <div class="op-export-title">Selecciona formato</div>
+          <div class="op-format-grid">
+            <button type="button" data-export-format="xlsx">XLSX</button>
+            <button type="button" data-export-format="txt">TXT</button>
+            <button type="button" data-export-format="csv">CSV</button>
+            <button type="button" data-export-format="json">JSON</button>
+          </div>
+        </div>
+      </div>`;
+    actions.appendChild(wrap);
 
-    parent.insertBefore(group, txtButton);
-    $('#globalExportBtn')?.addEventListener('click', runUnifiedExport);
+    const trigger = $('#operationalMenuBtn');
+    const menu = $('#operationalMenu');
+    const exportPanel = $('#operationalExportPanel');
+
+    trigger.addEventListener('click', event => {
+      event.stopPropagation();
+      const opening = menu.hidden;
+      menu.hidden = !opening;
+      trigger.setAttribute('aria-expanded', String(opening));
+      if (!opening) exportPanel.hidden = true;
+    });
+
+    menu.addEventListener('click', event => {
+      event.stopPropagation();
+      const action = event.target.closest('[data-op-action]')?.dataset.opAction;
+      const format = event.target.closest('[data-export-format]')?.dataset.exportFormat;
+      if (format) {
+        closeMenu();
+        runExport(format);
+        return;
+      }
+      if (action === 'new') {
+        closeMenu();
+        $('#newSessionBtn')?.click();
+      } else if (action === 'import') {
+        closeMenu();
+        $('#importBtn')?.click();
+      } else if (action === 'export') {
+        exportPanel.hidden = !exportPanel.hidden;
+      }
+    });
+
+    document.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeMenu();
+    });
     return true;
   }
 
   function boot() {
-    if (!createControls()) {
-      setTimeout(createControls, 100);
-    }
-    window.UnifiedExport = {run: runUnifiedExport, buildRows, createControls};
+    if (!createMenu()) setTimeout(createMenu, 100);
+    window.UnifiedExport = {
+      run: format => runExport(format || 'xlsx'),
+      buildRows,
+      createMenu,
+      closeMenu
+    };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
