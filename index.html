@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#090d14">
   <title>Verificación y Match de Equipos</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="search-mode.css">
 </head>
 <body>
 <header class="topbar">
@@ -51,7 +52,18 @@
 
     <aside class="panel search-panel">
       <div class="panel-head"><div><h2>Búsqueda global</h2><p>Host SN o UA</p></div></div>
-      <div class="search-pad"><input id="searchInput" class="search" placeholder="Buscar…"><div id="searchResults" class="search-results"><div class="empty">Sin búsqueda activa.</div></div></div>
+      <div class="search-pad">
+        <div class="search-mode-switch" role="group" aria-label="Modo de búsqueda">
+          <button id="searchModeAuto" class="search-mode-btn active" type="button">Automático</button>
+          <button id="searchModeManual" class="search-mode-btn" type="button">Manual</button>
+        </div>
+        <div class="search-control-row">
+          <input id="searchInput" class="search" placeholder="Buscar…" autocomplete="off">
+          <button id="searchRunBtn" class="search-run-btn" type="button" hidden>Buscar</button>
+        </div>
+        <div id="searchModeHelp" class="search-mode-help">Busca mientras escribes o escaneas.</div>
+        <div id="searchResults" class="search-results"><div class="empty">Sin búsqueda activa.</div></div>
+      </div>
     </aside>
   </section>
 
@@ -81,5 +93,6 @@
 <div id="toast" class="toast"></div>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="app.js"></script>
+<script src="search-mode.js"></script>
 </body>
 </html>
