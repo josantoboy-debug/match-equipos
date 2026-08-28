@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090d14">
+  <title>Verificación y Match de Equipos</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">M</div>
+    <div><h1>Verificación y Match de Equipos</h1><p>Carcasa ↔ Equipo · Host SN + UA</p></div>
+  </div>
+  <div class="top-actions">
+    <span id="sessionBadge" class="badge">Sesión en memoria</span>
+    <button id="newSessionBtn" class="ghost danger">Nueva sesión</button>
+    <button id="importBtn" class="secondary">Importar Excel</button>
+    <button id="exportBtn" class="primary">Exportar Excel</button>
+    <input id="fileInput" type="file" accept=".xlsx,.xls" hidden>
+  </div>
+</header>
+
+<main class="app">
+  <section class="kpis">
+    <div class="kpi"><span>Total registrados</span><strong id="kTotal">0</strong></div>
+    <div class="kpi"><span>Carcasas</span><strong id="kCarcasas">0</strong></div>
+    <div class="kpi"><span>Equipos</span><strong id="kEquipos">0</strong></div>
+    <div class="kpi good"><span>Match realizados</span><strong id="kMatches">0</strong></div>
+    <div class="kpi good"><span>Match OK</span><strong id="kOk">0</strong></div>
+    <div class="kpi warn"><span>Match revisar</span><strong id="kReview">0</strong></div>
+    <div class="kpi pending"><span>Carcasas pendientes</span><strong id="kPC">0</strong></div>
+    <div class="kpi pending"><span>Equipos pendientes</span><strong id="kPE">0</strong></div>
+  </section>
+
+  <section class="main-grid">
+    <article class="panel register-panel">
+      <div class="panel-head"><div><h2>Registro operativo</h2><p>Escanea Host SN → ENTER → UA → ENTER</p></div><span class="mini-badge">Modo escáner</span></div>
+      <div class="mode-switch">
+        <button class="mode active" data-mode="Carcasa">CARCASA</button>
+        <button class="mode" data-mode="Equipo">EQUIPO / PLACA</button>
+      </div>
+      <div class="register-grid">
+        <label><span>Host SN <small>12 caracteres · inicia M</small></span><input id="hostInput" class="code" autocomplete="off" placeholder="M91616EQ4607"></label>
+        <label><span>UA / Unit Address <small>16 dígitos · inicia 0000</small></span><input id="uaInput" class="code" autocomplete="off" placeholder="000-01254-13118-223"></label>
+        <button id="registerBtn" class="primary big">Verificar / Registrar</button>
+      </div>
+      <div id="resultPanel" class="result neutral"><div class="result-icon">⌁</div><div><h3>Listo para verificar</h3><p>Selecciona Carcasa o Equipo y escanea los dos códigos.</p></div></div>
+    </article>
+
+    <aside class="panel search-panel">
+      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Host SN o UA</p></div></div>
+      <div class="search-pad"><input id="searchInput" class="search" placeholder="Buscar…"><div id="searchResults" class="search-results"><div class="empty">Sin búsqueda activa.</div></div></div>
+    </aside>
+  </section>
+
+  <section class="panel workspace">
+    <div class="workspace-head">
+      <nav class="tabs">
+        <button class="active" data-view="recent">Últimos <b id="cRecent">0</b></button>
+        <button data-view="pending">Pendientes <b id="cPending">0</b></button>
+        <button data-view="all">Equipos totales <b id="cAll">0</b></button>
+        <button data-view="matches">Equipos match <b id="cMatches">0</b></button>
+        <button data-view="found">Equipos encontrados <b id="cFound">0</b></button>
+        <button data-view="review">Revisar <b id="cReview">0</b></button>
+      </nav>
+      <div class="filters">
+        <button class="active" data-filter="Todos">Todos</button><button data-filter="OK">OK</button><button data-filter="Pendiente">Pendientes</button><button data-filter="Revisar">Revisar</button><button data-filter="Carcasa">Carcasas</button><button data-filter="Equipo">Equipos</button>
+      </div>
+    </div>
+    <div id="workspaceBody"></div>
+  </section>
+  <p class="footnote">Los datos permanecen solo en memoria. Exporta antes de cerrar o recargar.</p>
+</main>
+
+<div id="editModal" class="modal"><div class="modal-card small"><div class="modal-head"><h2>Corregir registro</h2><button data-close="editModal">×</button></div><div class="modal-body edit-grid"><input id="editId" type="hidden"><label>Tipo<select id="editType"><option>Carcasa</option><option>Equipo</option></select></label><label>Host SN<input id="editHost" class="code"></label><label>UA<input id="editUA" class="code"></label></div><div class="modal-foot"><button class="secondary" data-close="editModal">Cancelar</button><button id="saveEdit" class="primary">Guardar corrección</button></div></div></div>
+
+<div id="importModal" class="modal"><div class="modal-card"><div class="modal-head"><h2>Importar Excel</h2><button data-close="importModal">×</button></div><div class="modal-body"><div id="importSummary" class="import-summary"></div><div id="importBlocks"></div></div><div class="modal-foot"><button class="secondary" data-close="importModal">Cancelar</button><button id="runImport" class="primary">Importar y procesar</button></div></div></div>
+
+<div id="toast" class="toast"></div>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
