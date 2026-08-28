@@ -76,7 +76,7 @@
     <div class="equipment-register-head">
       <div>
         <div class="equipment-register-titleline"><h2>Registrador de equipos por caja</h2><span class="mini-badge">Validación estricta</span></div>
-        <p>LOTE → SERIAL → UA / UNIT ADDRESS → CAJA → CANTIDAD. La siguiente caja se crea solo cuando la actual alcanza su capacidad.</p>
+        <p>LOTE → CAJA → CANTIDAD → SERIAL → UA / UNIT ADDRESS. Después de configurar la caja, el ciclo de equipos continúa desde SERIAL.</p>
       </div>
       <div class="equipment-file-actions">
         <input id="equipmentImportFile" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt,.json" hidden>
@@ -92,15 +92,15 @@
     </div>
 
     <div class="equipment-entry-grid">
-      <label><span>LOTE <small>Obligatorio</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE-001"></label>
-      <label><span>SERIAL <small>12 caracteres · inicia M</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
-      <label><span>UA / UNIT ADDRESS <small>16 dígitos · inicia 0000</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" placeholder="0000125413118223"></label>
+      <label><span>LOTE <small>Solo letras y números</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE001" inputmode="text"></label>
       <label><span>CAJA <small>Secuencial</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="1"></label>
       <label class="equipment-quantity-field"><span>CANTIDAD <small>Equipos por caja</small></span><input id="equipmentQuantity" class="equipment-code" autocomplete="off" inputmode="numeric" type="number" min="1" step="1" placeholder="10"></label>
+      <label><span>SERIAL <small>12 caracteres · inicia M</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
+      <label><span>UA / UNIT ADDRESS <small>16 dígitos · inicia 0000</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" placeholder="0000125413118223"></label>
       <button id="equipmentAddBtn" class="primary equipment-add-btn" type="button">Agregar equipo</button>
     </div>
 
-    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Lote, Caja y Cantidad. La Caja solo avanzará cuando alcance la cantidad especificada.</small></div></div>
+    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Lote, Caja y Cantidad. Luego registra SERIAL y UA según el modo Manual o Automático.</small></div></div>
 
     <div class="equipment-register-summary">
       <div><span>Total registrados</span><strong id="equipmentTotalCount">0</strong></div>
@@ -153,5 +153,6 @@
 <script src="operator-lock.js"></script>
 <script src="registry-export.js"></script>
 <script src="audit-fixes.js"></script>
+<script src="equipment-entry-flow.js"></script>
 </body>
 </html>
