@@ -18,13 +18,16 @@
       if (typeof originalSearchHandler === 'function') {
         originalSearchHandler.call(input, new Event('input'));
       }
+      if (window.FileIndexSearch && typeof window.FileIndexSearch.appendResults === 'function') {
+        window.FileIndexSearch.appendResults(input.value, results);
+      }
     }
 
     function manualWaitingMessage() {
       const value = input.value.trim();
       results.innerHTML = value
         ? '<div class="empty">Pulsa <strong>Buscar</strong> o ENTER para ejecutar la búsqueda.</div>'
-        : '<div class="empty">Escribe o escanea un Host SN o UA.</div>';
+        : '<div class="empty">Escribe o escanea un Host SN, UA o texto.</div>';
     }
 
     function setSearchMode(mode) {
@@ -37,7 +40,7 @@
       help.classList.toggle('manual', !automatic);
 
       if (automatic) {
-        help.textContent = 'Busca mientras escribes o escaneas.';
+        help.textContent = 'Busca en registros y archivos indexados mientras escribes o escaneas.';
         input.oninput = executeSearch;
         executeSearch();
       } else {
@@ -60,6 +63,7 @@
       }
     });
 
+    window.MatchSearchModes = { executeSearch, setSearchMode };
     setSearchMode('automatic');
   });
 })();
