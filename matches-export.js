@@ -4,6 +4,15 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
+  function esc(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   function textOf(element) {
     return String(element?.textContent ?? '').trim().replace(/\s+/g, ' ');
   }
@@ -12,7 +21,7 @@
     const toast = $('#toast');
     if (!toast) return;
     toast.className = `toast show ${tone}`;
-    toast.innerHTML = `<strong>${title}</strong><span>${message}</span>`;
+    toast.innerHTML = `<strong>${esc(title)}</strong><span>${esc(message)}</span>`;
     clearTimeout(showToast.timer);
     showToast.timer = setTimeout(() => toast.classList.remove('show'), 4200);
   }
@@ -26,24 +35,24 @@
     const previousVisibility = workspaceBody.style.visibility;
     workspaceBody.style.visibility = 'hidden';
 
-    if (activeTab !== foundTab) foundTab.click();
-
-    const rows = $$('table tbody tr', workspaceBody).map(row => {
-      const cells = $$('td', row).map(td => textOf(td));
-      if (cells.length < 6) return null;
-      return {
-        host: cells[0],
-        uaCarcasa: cells[1],
-        uaEquipo: cells[2],
-        resultado: cells[3],
-        fecha: cells[4],
-        origen: cells[5]
-      };
-    }).filter(Boolean);
-
-    if (activeTab && activeTab !== foundTab) activeTab.click();
-    workspaceBody.style.visibility = previousVisibility;
-    return rows;
+    try {
+      if (activeTab !== foundTab) foundTab.click();
+      return $$('table tbody tr', workspaceBody).map(row => {
+        const cells = $$('td', row).map(td => textOf(td));
+        if (cells.length < 6) return null;
+        return {
+          host: cells[0],
+          uaCarcasa: cells[1],
+          uaEquipo: cells[2],
+          resultado: cells[3],
+          fecha: cells[4],
+          origen: cells[5]
+        };
+      }).filter(Boolean);
+    } finally {
+      if (activeTab && activeTab !== foundTab) activeTab.click();
+      workspaceBody.style.visibility = previousVisibility;
+    }
   }
 
   function extractCurrentFileReferences() {
@@ -100,11 +109,8 @@
       'UBICACIONES INDEXADAS:'
     ];
 
-    if (!allRefs.length) {
-      lines.push('  - Sin ubicación indexada en los archivos cargados.');
-    } else {
-      allRefs.forEach(ref => lines.push(`  - ${ref}`));
-    }
+    if (!allRefs.length) lines.push('  - Sin ubicación indexada en los archivos cargados.');
+    else allRefs.forEach(ref => lines.push(`  - ${ref}`));
 
     lines.push('');
     return lines;
@@ -140,19 +146,27 @@
     return lines;
   }
 
-  function downloadText(content) {
+  function fallbackName() {
     const now = new Date();
     const pad = value => String(value).padStart(2, '0');
-    const filename = `Matches_Ubicaciones_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.txt`;
+    return `Matches_Ubicaciones_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.txt`;
+  }
+
+  function downloadText(content) {
+    const filename = window.OperatorSession?.nextExportName?.('BUSQUEDA', 'txt') || fallbackName();
     const blob = new Blob(['\uFEFF', content], {type: 'text/plain;charset=utf-8'});
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = filename;
+    link.style.display = 'none';
     document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    try {
+      HTMLElement.prototype.click.call(link);
+    } finally {
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
     return filename;
   }
 
@@ -180,10 +194,12 @@
     try {
       const stats = window.FileIndexSearch?.getStats?.() || {sources: 0, entries: 0};
       const generated = new Date().toLocaleString('es-PA');
+      const operator = window.OperatorSession?.getCurrentOperator?.()?.name || 'Sin operador';
       const lines = [
         'VERIFICACIÓN Y MATCH DE EQUIPOS',
         'REPORTE DE MATCHES Y UBICACIONES INDEXADAS',
         '======================================================================',
+        `Operador          : ${operator}`,
         `Generado          : ${generated}`,
         `Matches activos   : ${matches.length}`,
         `Encontrados prev. : ${legacy.length}`,
@@ -199,10 +215,11 @@
       lines.push(...buildLegacySection(legacy));
 
       const filename = downloadText(lines.join('\r\n'));
+      window.OperatorSession?.saveNow?.();
       showToast('TXT exportado', `${filename} · ${matches.length} matches incluidos.`, 'ok');
     } catch (error) {
-      console.error(error);
-      showToast('Error al exportar TXT', error.message || String(error), 'error');
+      console.error('[matches-export]', error);
+      showToast('Error al exportar TXT', error?.message || String(error), 'error');
     } finally {
       input.value = originalQuery;
       input.dispatchEvent(new Event('input'));
