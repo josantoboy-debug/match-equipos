@@ -5,7 +5,8 @@
     rows: [],
     seq: 1,
     editingId: null,
-    dirty: false
+    dirty: false,
+    captureMode: 'manual'
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -71,6 +72,61 @@
     toast.innerHTML = `<strong>${esc(title)}</strong><span>${esc(message)}</span>`;
     clearTimeout(showToast.timer);
     showToast.timer = setTimeout(() => toast.classList.remove('show'), 4200);
+  }
+
+  function setupCaptureModeControl() {
+    if ($('#equipmentRegisterModeBtn')) return;
+    const addButton = $('#equipmentAddBtn');
+    if (!addButton?.parentNode) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'equipment-capture-mode';
+    wrapper.innerHTML = `
+      <span>MODO REGISTRO</span>
+      <button id="equipmentRegisterModeBtn" class="equipment-mode-toggle manual" type="button" aria-pressed="false">
+        <strong>MANUAL</strong>
+        <small>Toca para automático</small>
+      </button>`;
+    addButton.parentNode.insertBefore(wrapper, addButton);
+    $('#equipmentRegisterModeBtn').addEventListener('click', () => {
+      setCaptureMode(registry.captureMode === 'manual' ? 'automatic' : 'manual');
+    });
+    updateCaptureModeUI();
+  }
+
+  function updateCaptureModeUI() {
+    const button = $('#equipmentRegisterModeBtn');
+    if (!button) return;
+    const automatic = registry.captureMode === 'automatic';
+    button.classList.toggle('automatic', automatic);
+    button.classList.toggle('manual', !automatic);
+    button.setAttribute('aria-pressed', automatic ? 'true' : 'false');
+    button.innerHTML = automatic
+      ? '<strong>AUTOMÁTICO</strong><small>UA + ENTER registra</small>'
+      : '<strong>MANUAL</strong><small>Usa Agregar equipo</small>';
+    const addButton = $('#equipmentAddBtn');
+    if (addButton && !registry.editingId) {
+      addButton.textContent = automatic ? 'Agregar ahora' : 'Agregar equipo';
+    }
+  }
+
+  function setCaptureMode(mode) {
+    registry.captureMode = mode === 'automatic' ? 'automatic' : 'manual';
+    updateCaptureModeUI();
+    const automatic = registry.captureMode === 'automatic';
+    if (automatic) {
+      const lotOk = validateLot($('#equipmentLot')?.value).valid;
+      const boxOk = validateBox($('#equipmentBox')?.value).valid;
+      setMessage(
+        lotOk && boxOk ? 'ok' : 'warn',
+        'Registro automático activado',
+        lotOk && boxOk
+          ? 'Lote y Caja están listos. Escanea SERIAL → ENTER → UA → ENTER y se agregará automáticamente.'
+          : 'Confirma primero LOTE y CAJA. Después cada equipo se registrará con SERIAL → ENTER → UA → ENTER.'
+      );
+    } else {
+      setMessage('ok', 'Registro manual activado', 'Completa los cuatro campos y utiliza Agregar equipo para guardar el registro.');
+    }
+    $('#equipmentSerial')?.focus();
   }
 
   function duplicateCheck(serial, ua, excludeId = null) {
@@ -184,8 +240,15 @@
     if (keepLot && lot.value) lot.classList.add('field-valid');
     if (keepBox && box.value) box.classList.add('field-valid');
     registry.editingId = null;
-    $('#equipmentAddBtn').textContent = 'Agregar equipo';
-    setMessage('ok', 'Listo para el siguiente equipo', `Lote ${lot.value || '—'} y Caja ${box.value || '—'} se mantienen. Escanea el siguiente SERIAL.`);
+    updateCaptureModeUI();
+    const automatic = registry.captureMode === 'automatic';
+    setMessage(
+      'ok',
+      'Listo para el siguiente equipo',
+      automatic
+        ? `Lote ${lot.value || '—'} y Caja ${box.value || '—'} se mantienen. Escanea SERIAL → ENTER → UA → ENTER.`
+        : `Lote ${lot.value || '—'} y Caja ${box.value || '—'} se mantienen. Escanea el siguiente SERIAL.`
+    );
     renderSummary();
     serial.focus();
   }
@@ -204,19 +267,19 @@
       setMessage('error', `${name} inválido`, result.message);
       input.focus();
       input.select?.();
-      return;
+      return false;
     }
 
     const dup = duplicateCheck(v.serial.value, v.ua.value, registry.editingId);
     if (dup) {
       setMessage('error', 'Registro duplicado bloqueado', dup);
       showToast('No se agregó', dup, 'error');
-      return;
+      return false;
     }
 
     if (registry.editingId) {
       const row = registry.rows.find(item => item.id === registry.editingId);
-      if (!row) return;
+      if (!row) return false;
       row.lot = v.lot.value;
       row.serial = v.serial.value;
       row.ua = v.ua.value;
@@ -227,7 +290,7 @@
       renderRows();
       showToast('Registro actualizado', `${row.serial} · ${row.box}`, 'ok');
       resetCapture({keepLot:true, keepBox:true});
-      return;
+      return true;
     }
 
     const row = {
@@ -238,14 +301,19 @@
       box: v.box.value,
       boxPosition: 0,
       at: new Date().toISOString(),
-      origin: 'Captura manual'
+      origin: registry.captureMode === 'automatic' ? 'Captura automática' : 'Captura manual'
     };
     registry.rows.push(row);
     recalcBoxPositions();
     markDirty();
     renderRows();
-    showToast('Equipo agregado', `${row.serial} · ${row.box} · equipo ${row.boxPosition}`, 'ok');
+    showToast(
+      registry.captureMode === 'automatic' ? 'Equipo registrado automáticamente' : 'Equipo agregado',
+      `${row.serial} · ${row.box} · equipo ${row.boxPosition}`,
+      'ok'
+    );
     resetCapture({keepLot:true, keepBox:true});
+    return true;
   }
 
   function startEdit(id) {
@@ -258,7 +326,7 @@
     $('#equipmentBox').value = row.box;
     validateAll();
     $('#equipmentAddBtn').textContent = 'Guardar cambios';
-    setMessage('warn', 'Editando registro', `${row.id} · valida los cuatro campos antes de guardar.`);
+    setMessage('warn', 'Editando registro', `${row.id} · la edición siempre requiere pulsar Guardar cambios.`);
     $('#equipmentLot').focus();
     $('#equipmentRegisterPanel').scrollIntoView({behavior:'smooth', block:'start'});
   }
@@ -272,6 +340,7 @@
     recalcBoxPositions();
     markDirty();
     renderRows();
+    updateCaptureModeUI();
     showToast('Equipo eliminado', row.serial, 'warn');
   }
 
@@ -494,22 +563,53 @@
       event.preventDefault();
       confirmField($('#equipmentLot'), validateLot($('#equipmentLot').value), $('#equipmentSerial'));
     });
+
     $('#equipmentSerial').addEventListener('keydown', event => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
       confirmField($('#equipmentSerial'), validateSerial($('#equipmentSerial').value), $('#equipmentUA'));
     });
+
     $('#equipmentUA').addEventListener('keydown', event => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
-      confirmField($('#equipmentUA'), validateUA($('#equipmentUA').value), $('#equipmentBox'));
+      const uaResult = validateUA($('#equipmentUA').value);
+      if (!confirmField($('#equipmentUA'), uaResult, null)) return;
+
+      if (registry.captureMode === 'automatic' && !registry.editingId) {
+        const lotResult = validateLot($('#equipmentLot').value);
+        const boxResult = validateBox($('#equipmentBox').value);
+        fieldState($('#equipmentLot'), lotResult);
+        fieldState($('#equipmentBox'), boxResult);
+        if (!lotResult.valid) {
+          setMessage('error', 'LOTE no confirmado', lotResult.message);
+          $('#equipmentLot').focus();
+          return;
+        }
+        if (!boxResult.valid) {
+          setMessage('warn', 'Falta confirmar CAJA', 'Es la primera captura de esta caja. Ingresa CAJA y presiona ENTER; después el registro será automático.');
+          $('#equipmentBox').focus();
+          return;
+        }
+        addOrSave();
+        return;
+      }
+
+      $('#equipmentBox').focus();
+      $('#equipmentBox').select?.();
     });
+
     $('#equipmentBox').addEventListener('keydown', event => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
       const result = validateBox($('#equipmentBox').value);
       if (!confirmField($('#equipmentBox'), result, null)) return;
-      addOrSave();
+      if (registry.captureMode === 'automatic' && !registry.editingId) {
+        addOrSave();
+      } else {
+        setMessage('ok', 'CAJA confirmada', 'Modo manual: pulsa Agregar equipo para guardar el registro.');
+        $('#equipmentAddBtn').focus();
+      }
     });
   }
 
@@ -533,6 +633,7 @@
     const required = ['#equipmentLot','#equipmentSerial','#equipmentUA','#equipmentBox','#equipmentAddBtn','#equipmentImportBtn','#equipmentImportFile','#equipmentExportBtn'];
     if (required.some(selector => !$(selector))) return;
 
+    setupCaptureModeControl();
     ['#equipmentLot','#equipmentSerial','#equipmentUA','#equipmentBox'].forEach(selector => $(selector).addEventListener('input', liveValidate));
     $('#equipmentSerial').addEventListener('input', event => { event.target.value = normSerial(event.target.value); });
     $('#equipmentAddBtn').addEventListener('click', addOrSave);
@@ -541,6 +642,7 @@
     $('#equipmentExportBtn').addEventListener('click', exportRegistry);
     wireEnterFlow();
     renderRows();
+    updateCaptureModeUI();
 
     window.addEventListener('beforeunload', event => {
       if (registry.dirty) { event.preventDefault(); event.returnValue = ''; }
@@ -549,7 +651,9 @@
     window.EquipmentRegistry = {
       appendSearchResults: appendRegistrySearchResults,
       getRows: () => registry.rows.map(row => ({...row})),
-      getStats: () => counts()
+      getStats: () => counts(),
+      getCaptureMode: () => registry.captureMode,
+      setCaptureMode
     };
   });
 })();
