@@ -18,12 +18,7 @@
     <div><h1>Verificación y Match de Equipos</h1><p>Carcasa ↔ Equipo · Host SN + UA</p></div>
   </div>
   <div class="top-actions">
-    <span id="sessionBadge" class="badge">Sesión en memoria</span>
-    <button id="newSessionBtn" class="ghost danger">Nueva sesión</button>
-    <button id="importBtn" class="secondary">Importar archivo</button>
-    <button id="exportMatchesTxtBtn" class="secondary">Exportar matches TXT</button>
-    <button id="exportBtn" class="primary">Exportar Excel</button>
-    <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,.txt,.log,.json,.xml,.html,.htm,.md,.dat,.ini,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.oasis.opendocument.spreadsheet,text/plain,text/csv,text/tab-separated-values,application/json,application/xml,text/xml,text/html,text/markdown" hidden>
+    <span id="sessionBadge" class="badge session-badge-hidden" aria-hidden="true">Sesión en memoria</span>
   </div>
 </header>
 
@@ -41,7 +36,20 @@
 
   <section class="main-grid">
     <article class="panel register-panel">
-      <div class="panel-head"><div><h2>Registro operativo</h2><p>Escanea Host SN → ENTER → UA → ENTER</p></div><span class="mini-badge">Modo escáner</span></div>
+      <div class="panel-head register-panel-head">
+        <div>
+          <h2>Registro operativo</h2>
+          <p>Escanea Host SN → ENTER → UA → ENTER</p>
+        </div>
+        <div class="operational-actions" aria-label="Acciones de sesión e importación/exportación">
+          <span class="mini-badge">Modo escáner</span>
+          <button id="newSessionBtn" class="ghost danger compact-action" type="button">Nueva sesión</button>
+          <button id="importBtn" class="secondary compact-action" type="button">Importar archivo</button>
+          <button id="exportMatchesTxtBtn" class="secondary compact-action" type="button">Exportar matches TXT</button>
+          <button id="exportBtn" class="primary compact-action" type="button">Exportar Excel</button>
+          <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,.txt,.log,.json,.xml,.html,.htm,.md,.dat,.ini,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.oasis.opendocument.spreadsheet,text/plain,text/csv,text/tab-separated-values,application/json,application/xml,text/xml,text/html,text/markdown" hidden>
+        </div>
+      </div>
       <div class="mode-switch">
         <button class="mode active" data-mode="Carcasa">CARCASA</button>
         <button class="mode" data-mode="Equipo">EQUIPO / PLACA</button>
