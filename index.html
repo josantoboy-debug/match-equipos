@@ -75,7 +75,7 @@
     <div class="equipment-register-head">
       <div>
         <div class="equipment-register-titleline"><h2>Registrador de equipos por caja</h2><span class="mini-badge">Validación estricta</span></div>
-        <p>LOTE → SERIAL → UA / UNIT ADDRESS → CAJA. ENTER solo avanza cuando el campo actual es válido.</p>
+        <p>LOTE → SERIAL → UA / UNIT ADDRESS → CAJA → CANTIDAD. La siguiente caja se crea solo cuando la actual alcanza su capacidad.</p>
       </div>
       <div class="equipment-file-actions">
         <input id="equipmentImportFile" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt,.json" hidden>
@@ -94,17 +94,18 @@
       <label><span>LOTE <small>Obligatorio</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE-001"></label>
       <label><span>SERIAL <small>12 caracteres · inicia M</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
       <label><span>UA / UNIT ADDRESS <small>16 dígitos · inicia 0000</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" placeholder="0000125413118223"></label>
-      <label><span>CAJA <small>Obligatoria</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="CAJA-01"></label>
+      <label><span>CAJA <small>Secuencial</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="1"></label>
+      <label class="equipment-quantity-field"><span>CANTIDAD <small>Equipos por caja</small></span><input id="equipmentQuantity" class="equipment-code" autocomplete="off" inputmode="numeric" type="number" min="1" step="1" placeholder="10"></label>
       <button id="equipmentAddBtn" class="primary equipment-add-btn" type="button">Agregar equipo</button>
     </div>
 
-    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Lote y Caja se conservarán automáticamente para registrar varios equipos consecutivos.</small></div></div>
+    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Lote, Caja y Cantidad. La Caja solo avanzará cuando alcance la cantidad especificada.</small></div></div>
 
     <div class="equipment-register-summary">
       <div><span>Total registrados</span><strong id="equipmentTotalCount">0</strong></div>
       <div><span>Lotes</span><strong id="equipmentLotCount">0</strong></div>
       <div><span>Cajas</span><strong id="equipmentBoxCount">0</strong></div>
-      <div><span>Caja actual</span><strong id="equipmentCurrentBoxCount">0</strong><small id="equipmentCurrentBoxLabel">Sin caja seleccionada</small></div>
+      <div><span>Caja actual / capacidad</span><strong id="equipmentCurrentBoxCount">0</strong><small id="equipmentCurrentBoxLabel">Sin caja seleccionada</small></div>
     </div>
 
     <div class="equipment-table-wrap">
@@ -145,5 +146,6 @@
 <script src="file-index.js"></script>
 <script src="matches-export.js"></script>
 <script src="equipment-register.js"></script>
+<script src="equipment-capacity.js"></script>
 </body>
 </html>
