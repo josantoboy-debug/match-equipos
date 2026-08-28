@@ -104,24 +104,19 @@
   }
 
   function buildRows() {
-    return collectFoundRows().map((row, index) => {
-      const hostRefs = references(row.host);
-      const carcasaRefs = references(row.uaCarcasa);
-      const equipoRefs = references(row.uaEquipo);
-      return {
-        N: index + 1,
-        'HOST SN': row.host || '',
-        'UA CARCASA': row.uaCarcasa || '',
-        'UA EQUIPO': row.uaEquipo || '',
-        RESULTADO: row.resultado || '',
-        FECHA: row.fecha || '',
-        ORIGEN: row.origen || '',
-        'UBICACION HOST': hostRefs.join(' || '),
-        'UBICACION UA CARCASA': carcasaRefs.join(' || '),
-        'UBICACION UA EQUIPO': equipoRefs.join(' || '),
-        OPERADOR: operatorName()
-      };
-    });
+    return collectFoundRows().map((row, index) => ({
+      N: index + 1,
+      'HOST SN': row.host || '',
+      'UA CARCASA': row.uaCarcasa || '',
+      'UA EQUIPO': row.uaEquipo || '',
+      RESULTADO: row.resultado || '',
+      FECHA: row.fecha || '',
+      ORIGEN: row.origen || '',
+      'UBICACION HOST': references(row.host).join(' || '),
+      'UBICACION UA CARCASA': references(row.uaCarcasa).join(' || '),
+      'UBICACION UA EQUIPO': references(row.uaEquipo).join(' || '),
+      OPERADOR: operatorName()
+    }));
   }
 
   function csvEscape(value) {
@@ -158,10 +153,7 @@
       total: rows.length,
       registros: rows
     };
-    nativeDownload(
-      new Blob([JSON.stringify(payload, null, 2)], {type:'application/json;charset=utf-8'}),
-      filename
-    );
+    nativeDownload(new Blob([JSON.stringify(payload, null, 2)], {type:'application/json;charset=utf-8'}), filename);
     window.OperatorSession?.saveNow?.();
     showToast('JSON exportado', `${filename} · ${rows.length} registros.`, 'ok');
   }
@@ -201,14 +193,59 @@
       setTimeout(() => {
         button.disabled = false;
         button.textContent = previousText || 'Exportar';
-      }, 80);
+      }, 100);
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const button = $('#globalExportBtn');
-    if (!button) return;
-    button.addEventListener('click', runUnifiedExport);
-    window.UnifiedExport = {run: runUnifiedExport, buildRows};
-  });
+  function createControls() {
+    if ($('#globalExportBtn')) return true;
+    const txtButton = $('#exportMatchesTxtBtn');
+    const xlsxButton = $('#exportBtn');
+    const parent = xlsxButton?.parentElement || txtButton?.parentElement;
+    if (!parent || !txtButton || !xlsxButton) return false;
+
+    txtButton.hidden = true;
+    xlsxButton.hidden = true;
+    txtButton.style.display = 'none';
+    xlsxButton.style.display = 'none';
+
+    if (!$('#unifiedExportStyles')) {
+      const style = document.createElement('style');
+      style.id = 'unifiedExportStyles';
+      style.textContent = `
+        .global-export-group{display:inline-flex;align-items:center;gap:6px}
+        .global-export-format{height:34px;min-width:78px;border:1px solid var(--line2);border-radius:9px;background:#0c141f;color:var(--text);padding:0 28px 0 9px;font-size:10px;font-weight:800;outline:none}
+        .global-export-format:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,140,255,.12)}
+        .global-export-btn{min-width:92px}
+        @media(max-width:900px){.global-export-group{flex:1 1 220px}.global-export-format{flex:0 0 86px}.global-export-btn{flex:1}}
+      `;
+      document.head.appendChild(style);
+    }
+
+    const group = document.createElement('div');
+    group.className = 'global-export-group';
+    group.setAttribute('aria-label', 'Exportar búsqueda y matches');
+    group.innerHTML = `
+      <select id="globalExportFormat" class="global-export-format" aria-label="Formato de exportación">
+        <option value="xlsx">XLSX</option>
+        <option value="txt">TXT</option>
+        <option value="csv">CSV</option>
+        <option value="json">JSON</option>
+      </select>
+      <button id="globalExportBtn" class="primary compact-action global-export-btn" type="button">Exportar</button>`;
+
+    parent.insertBefore(group, txtButton);
+    $('#globalExportBtn')?.addEventListener('click', runUnifiedExport);
+    return true;
+  }
+
+  function boot() {
+    if (!createControls()) {
+      setTimeout(createControls, 100);
+    }
+    window.UnifiedExport = {run: runUnifiedExport, buildRows, createControls};
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
