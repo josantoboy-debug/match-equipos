@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="search-mode.css">
   <link rel="stylesheet" href="file-index.css">
+  <link rel="stylesheet" href="equipment-register.css">
 </head>
 <body>
 <header class="topbar">
@@ -70,6 +71,50 @@
     </aside>
   </section>
 
+  <section class="panel equipment-register-panel" id="equipmentRegisterPanel">
+    <div class="equipment-register-head">
+      <div>
+        <div class="equipment-register-titleline"><h2>Registrador de equipos por caja</h2><span class="mini-badge">Validación estricta</span></div>
+        <p>LOTE → SERIAL → UA / UNIT ADDRESS → CAJA. ENTER solo avanza cuando el campo actual es válido.</p>
+      </div>
+      <div class="equipment-file-actions">
+        <input id="equipmentImportFile" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt,.json" hidden>
+        <button id="equipmentImportBtn" class="secondary" type="button">Cargar registro</button>
+        <select id="equipmentExportFormat" aria-label="Formato de descarga">
+          <option value="xlsx">XLSX</option>
+          <option value="csv">CSV</option>
+          <option value="json">JSON</option>
+          <option value="txt">TXT</option>
+        </select>
+        <button id="equipmentExportBtn" class="primary" type="button">Descargar registro</button>
+      </div>
+    </div>
+
+    <div class="equipment-entry-grid">
+      <label><span>LOTE <small>Obligatorio</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE-001"></label>
+      <label><span>SERIAL <small>12 caracteres · inicia M</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
+      <label><span>UA / UNIT ADDRESS <small>16 dígitos · inicia 0000</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" placeholder="0000125413118223"></label>
+      <label><span>CAJA <small>Obligatoria</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="CAJA-01"></label>
+      <button id="equipmentAddBtn" class="primary equipment-add-btn" type="button">Agregar equipo</button>
+    </div>
+
+    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Lote y Caja se conservarán automáticamente para registrar varios equipos consecutivos.</small></div></div>
+
+    <div class="equipment-register-summary">
+      <div><span>Total registrados</span><strong id="equipmentTotalCount">0</strong></div>
+      <div><span>Lotes</span><strong id="equipmentLotCount">0</strong></div>
+      <div><span>Cajas</span><strong id="equipmentBoxCount">0</strong></div>
+      <div><span>Caja actual</span><strong id="equipmentCurrentBoxCount">0</strong><small id="equipmentCurrentBoxLabel">Sin caja seleccionada</small></div>
+    </div>
+
+    <div class="equipment-table-wrap">
+      <table class="equipment-table">
+        <thead><tr><th>#</th><th>Lote</th><th>Serial</th><th>UA / Unit Address</th><th>Caja</th><th># en caja</th><th>Fecha/Hora</th><th>Acciones</th></tr></thead>
+        <tbody id="equipmentRegisterBody"><tr><td colspan="8" class="equipment-empty">Sin equipos registrados.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="panel workspace">
     <div class="workspace-head">
       <nav class="tabs">
@@ -99,5 +144,6 @@
 <script src="search-mode.js"></script>
 <script src="file-index.js"></script>
 <script src="matches-export.js"></script>
+<script src="equipment-register.js"></script>
 </body>
 </html>
