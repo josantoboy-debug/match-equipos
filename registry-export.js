@@ -121,16 +121,16 @@
     const select = $('#equipmentExportFormat');
     const rows = rowsForExport();
 
-    if (!button || !select) return;
+    if (!button || !select) return null;
     if (!rows.length) {
       showToast('Sin registros', 'Agrega o carga equipos antes de descargar.', 'warn');
-      return;
+      return null;
     }
 
     const format = String(select.value || 'xlsx').toLowerCase();
     if (!['xlsx', 'csv', 'json', 'txt'].includes(format)) {
       showToast('Formato no compatible', format, 'error');
-      return;
+      return null;
     }
 
     button.disabled = true;
@@ -138,8 +138,6 @@
     button.textContent = 'Descargando…';
 
     try {
-      // Primero construimos el contenido. El número REGISTRO #000 se reserva
-      // únicamente después de confirmar que el formato se puede generar.
       let payload;
       let mime = '';
 
@@ -178,13 +176,31 @@
         detail: {filename, format, count: rows.length}
       }));
       showToast('Registro descargado', `${filename} · ${rows.length} equipos.`, 'ok');
+      return {filename, format, count: rows.length};
     } catch (error) {
       console.error('[registry-export]', error);
       showToast('Error al descargar registro', error?.message || String(error), 'error');
+      return null;
     } finally {
       button.disabled = false;
       button.textContent = previousText || 'Descargar registro';
     }
+  }
+
+  function temporarilySuppressLegacyDownload() {
+    const savedAnchorClick = HTMLAnchorElement.prototype.click;
+    const savedWriteFile = typeof XLSX !== 'undefined' ? XLSX.writeFile : null;
+
+    HTMLAnchorElement.prototype.click = function() {};
+    if (typeof XLSX !== 'undefined' && typeof XLSX.writeFile === 'function') {
+      XLSX.writeFile = function() {};
+    }
+
+    setTimeout(() => {
+      HTMLAnchorElement.prototype.click = savedAnchorClick;
+      if (typeof XLSX !== 'undefined' && savedWriteFile) XLSX.writeFile = savedWriteFile;
+      window.MatchEquiposAuditFixes?.restoreNativeAnchorClick?.();
+    }, 0);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -193,8 +209,19 @@
 
     button.addEventListener('click', event => {
       event.preventDefault();
-      event.stopImmediatePropagation();
-      exportRegistry();
+      const result = exportRegistry();
+      if (!result) {
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      // Permitimos que el listener original continúe solo para que actualice
+      // su estado interno dirty=false. Sus APIs de descarga quedan anuladas
+      // durante este mismo clic, evitando un segundo archivo y otro contador.
+      temporarilySuppressLegacyDownload();
+      setTimeout(() => {
+        showToast('Registro descargado', `${result.filename} · ${result.count} equipos.`, 'ok');
+      }, 20);
     }, true);
 
     window.RegistryExport = {exportRegistry};
