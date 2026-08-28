@@ -7,6 +7,7 @@
   <title>Verificación y Match de Equipos</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="search-mode.css">
+  <link rel="stylesheet" href="file-index.css">
 </head>
 <body>
 <header class="topbar">
@@ -17,9 +18,9 @@
   <div class="top-actions">
     <span id="sessionBadge" class="badge">Sesión en memoria</span>
     <button id="newSessionBtn" class="ghost danger">Nueva sesión</button>
-    <button id="importBtn" class="secondary">Importar Excel</button>
+    <button id="importBtn" class="secondary">Importar archivo</button>
     <button id="exportBtn" class="primary">Exportar Excel</button>
-    <input id="fileInput" type="file" accept=".xlsx,.xls" hidden>
+    <input id="fileInput" type="file" accept=".xlsx,.xls,.csv,.txt,.tsv,.log,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/plain,text/csv,text/tab-separated-values" hidden>
   </div>
 </header>
 
@@ -51,17 +52,18 @@
     </article>
 
     <aside class="panel search-panel">
-      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Host SN o UA</p></div></div>
+      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Registros + contenido de archivos indexados</p></div></div>
       <div class="search-pad">
         <div class="search-mode-switch" role="group" aria-label="Modo de búsqueda">
           <button id="searchModeAuto" class="search-mode-btn active" type="button">Automático</button>
           <button id="searchModeManual" class="search-mode-btn" type="button">Manual</button>
         </div>
         <div class="search-control-row">
-          <input id="searchInput" class="search" placeholder="Buscar…" autocomplete="off">
+          <input id="searchInput" class="search" placeholder="Host SN, UA o texto…" autocomplete="off">
           <button id="searchRunBtn" class="search-run-btn" type="button" hidden>Buscar</button>
         </div>
         <div id="searchModeHelp" class="search-mode-help">Busca mientras escribes o escaneas.</div>
+        <div id="fileIndexStatus" class="file-index-status"><span class="file-index-dot"></span><span>Sin archivos indexados</span></div>
         <div id="searchResults" class="search-results"><div class="empty">Sin búsqueda activa.</div></div>
       </div>
     </aside>
@@ -94,5 +96,6 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="app.js"></script>
 <script src="search-mode.js"></script>
+<script src="file-index.js"></script>
 </body>
 </html>
