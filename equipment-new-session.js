@@ -73,8 +73,21 @@
   }
 
   function install() {
-    const button = $('#equipmentNewSessionBtn');
-    if (!button || button.dataset.newSessionInstalled === '1') return;
+    const actions = $('.equipment-file-actions');
+    if (!actions) return;
+
+    let button = $('#equipmentNewSessionBtn');
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'equipmentNewSessionBtn';
+      button.type = 'button';
+      button.className = 'ghost danger';
+      button.textContent = 'Nueva sesión';
+      const importButton = $('#equipmentImportBtn');
+      actions.insertBefore(button, importButton || actions.firstChild);
+    }
+
+    if (button.dataset.newSessionInstalled === '1') return;
     button.dataset.newSessionInstalled = '1';
     button.addEventListener('click', startNewSession);
   }
@@ -82,5 +95,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
   else install();
 
-  window.EquipmentNewSession = { start: startNewSession };
+  window.EquipmentNewSession = { start: startNewSession, install };
 })();
