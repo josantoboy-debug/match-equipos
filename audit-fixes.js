@@ -5,9 +5,9 @@
 
   function restoreNativeAnchorClick() {
     try {
-      // operator-session.js de versiones anteriores instala un wrapper global
-      // sobre HTMLAnchorElement.prototype.click. Restauramos el comportamiento
-      // nativo para que una exportación no pueda bloquear a las demás.
+      // operator-session.js instala un wrapper global sobre click() para
+      // renombrar descargas. El exportador nuevo genera el nombre correcto
+      // directamente, así que restauramos el comportamiento nativo.
       if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.click === 'function') {
         HTMLAnchorElement.prototype.click = HTMLElement.prototype.click;
       }
@@ -22,10 +22,9 @@
     input.dataset.auditNormalized = '1';
     input.addEventListener('input', event => {
       const value = String(event.target.value || '');
-      // Mantiene compatibilidad con escáneres que insertan espacios o guiones,
-      // pero elimina cualquier carácter ajeno al UA antes de validar.
-      event.target.value = value.replace(/[^0-9\s-]/g, '');
-    });
+      const cleaned = value.replace(/[^0-9\s-]/g, '');
+      if (cleaned !== value) event.target.value = cleaned;
+    }, true);
   }
 
   function guardQuantity() {
@@ -37,7 +36,7 @@
       if (!raw) return;
       const safe = Math.min(100000, Math.max(1, Number(raw)));
       event.target.value = String(safe);
-    });
+    }, true);
   }
 
   function healthCheck() {
@@ -46,6 +45,7 @@
     if (!window.MatchSearchModes) problems.push('MatchSearchModes');
     if (!window.FileIndexSearch) problems.push('FileIndexSearch');
     if (!window.OperatorSession) problems.push('OperatorSession');
+    if (!window.RegistryExport) problems.push('RegistryExport');
     if (typeof XLSX === 'undefined') problems.push('SheetJS/XLSX');
 
     window.MatchEquiposHealth = {
@@ -66,9 +66,9 @@
     setTimeout(healthCheck, 0);
   });
 
-  // operator-session instala sus wrappers al iniciar sesión. Este evento se
-  // dispara después, por lo que aquí volvemos a dejar el click nativo.
   document.addEventListener('operator:login', () => {
+    // operator-session instala su wrapper durante el login; esta restauración
+    // corre inmediatamente después de que el login termina.
     restoreNativeAnchorClick();
     setTimeout(healthCheck, 0);
   });
