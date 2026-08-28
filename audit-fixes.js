@@ -5,9 +5,6 @@
 
   function restoreNativeAnchorClick() {
     try {
-      // operator-session.js instala un wrapper global sobre click() para
-      // renombrar descargas. El exportador nuevo genera el nombre correcto
-      // directamente, así que restauramos el comportamiento nativo.
       if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.click === 'function') {
         HTMLAnchorElement.prototype.click = HTMLElement.prototype.click;
       }
@@ -39,6 +36,16 @@
     }, true);
   }
 
+  function loadUnifiedExport() {
+    if (window.UnifiedExport || document.querySelector('script[data-unified-export]')) return;
+    const script = document.createElement('script');
+    script.src = 'unified-export.js?v=72a89df';
+    script.dataset.unifiedExport = '1';
+    script.defer = true;
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar unified-export.js');
+    document.body.appendChild(script);
+  }
+
   function healthCheck() {
     const problems = [];
     if (!window.EquipmentRegistry) problems.push('EquipmentRegistry');
@@ -63,18 +70,19 @@
     restoreNativeAnchorClick();
     normalizeNumericUAInput();
     guardQuantity();
+    loadUnifiedExport();
     setTimeout(healthCheck, 0);
   });
 
   document.addEventListener('operator:login', () => {
-    // operator-session instala su wrapper durante el login; esta restauración
-    // corre inmediatamente después de que el login termina.
     restoreNativeAnchorClick();
+    loadUnifiedExport();
     setTimeout(healthCheck, 0);
   });
 
   window.MatchEquiposAuditFixes = {
     restoreNativeAnchorClick,
-    healthCheck
+    healthCheck,
+    loadUnifiedExport
   };
 })();
