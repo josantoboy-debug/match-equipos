@@ -112,11 +112,11 @@
     input.removeAttribute('aria-hidden');
     input.removeAttribute('tabindex');
     input.placeholder = '1–64';
-    input.title = `Cantidad de equipos asignados a esta caja. Mínimo 1, máximo ${MAX_PER_BOX}.`;
+    input.title = `Cantidad de equipos asignados a esta caja. Este número es el límite real de la caja. Mínimo 1, máximo ${MAX_PER_BOX}.`;
 
     const field = input.closest('label');
     const title = field?.querySelector('span');
-    if (title) title.innerHTML = `CANTIDAD <small>Asignada · máximo ${MAX_PER_BOX}</small>`;
+    if (title) title.innerHTML = `CANTIDAD <small>Límite de la caja · máximo ${MAX_PER_BOX}</small>`;
     $('#equipmentQuantityDisplay')?.remove();
   }
 
@@ -141,29 +141,34 @@
     }
 
     const remaining = Math.max(0, cap - count);
-    label.textContent = `${lot} · ${box} · ${remaining ? `faltan ${remaining}` : 'CANTIDAD COMPLETADA'}`;
+    label.textContent = `${lot} · ${box} · ${remaining ? `faltan ${remaining}` : 'LÍMITE ALCANZADO'}`;
+  }
+
+  function prepareNextBoxIfFull({announce = true} = {}) {
+    const cap = assignedQuantity();
+    const lot = norm($('#equipmentLot')?.value);
+    const box = norm($('#equipmentBox')?.value);
+    if (!cap || !lot || !box) return {moved:false, cap, lot, box, count:0};
+
+    const count = rowsInBox(lot, box).length;
+    if (count < cap) return {moved:false, cap, lot, box, count};
+
+    const next = nextAvailableBox(lot, box, cap);
+    if (next !== box) {
+      setBox(next);
+      if (announce) message('ok', `Caja ${box} completada`, `${count}/${cap} equipos. El límite de esta caja es ${cap}. El siguiente equipo irá a la Caja ${next}.`);
+      return {moved:true, cap, lot, box:next, previousBox:box, count};
+    }
+
+    if (announce) message('warn', `Caja ${box} completa`, `La caja alcanzó su límite de ${cap}/${cap} equipos.`);
+    return {moved:false, blocked:true, cap, lot, box, count};
   }
 
   function ensureCapacityBeforeRegister() {
     if (!validateQuantity()) return false;
-    const cap = assignedQuantity();
-    const lot = norm($('#equipmentLot')?.value);
-    const box = norm($('#equipmentBox')?.value);
-    if (!lot || !box) return true;
-
-    const count = rowsInBox(lot, box).length;
-    if (count >= cap) {
-      const next = nextAvailableBox(lot, box, cap);
-      if (next !== box) {
-        setBox(next);
-        message('ok', `Caja ${box} completada`, `${count}/${cap} equipos. Se preparó automáticamente la Caja ${next} manteniendo CANTIDAD ${cap}.`);
-      } else {
-        message('warn', `Caja ${box} completa`, `La caja ya alcanzó ${cap}/${cap} equipos.`);
-        return false;
-      }
-    }
+    const result = prepareNextBoxIfFull({announce:true});
     updateCapacityIndicator();
-    return true;
+    return !result.blocked;
   }
 
   function afterRegistryChanged() {
@@ -186,7 +191,7 @@
             if (boxCount >= cap && currentLot === upper(newest.lot) && currentBox === upper(newest.box)) {
               const next = nextAvailableBox(newest.lot, newest.box, cap);
               if (next !== newest.box) setBox(next);
-              message('ok', `Caja ${newest.box} completada`, `${boxCount}/${cap} equipos registrados.${next !== newest.box ? ` Nueva Caja ${next} preparada automáticamente.` : ''}`);
+              message('ok', `Caja ${newest.box} completada`, `${boxCount}/${cap} equipos registrados. Límite alcanzado.${next !== newest.box ? ` Nueva Caja ${next} preparada automáticamente.` : ''}`);
             } else if (currentLot === upper(newest.lot) && currentBox === upper(newest.box)) {
               const remaining = Math.max(0, cap - boxCount);
               message('ok', `Equipo ${boxCount} registrado`, `Caja ${newest.box}: ${boxCount}/${cap}. Faltan ${remaining} equipo${remaining === 1 ? '' : 's'}.`);
@@ -224,12 +229,26 @@
       }
     }, true);
 
+    // En automático, UA + ENTER registra sin pulsar el botón. Este guard se ejecuta
+    // antes del registrador principal para que nunca se pueda superar CANTIDAD.
     document.addEventListener('keydown', event => {
       if (event.key !== 'Enter' || event.target?.id !== 'equipmentUA') return;
-      if (validateQuantity({focus:false, announce:false})) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      validateQuantity({focus:true, announce:true});
+      if (!validateQuantity({focus:false, announce:false})) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        validateQuantity({focus:true, announce:true});
+        return;
+      }
+
+      const result = prepareNextBoxIfFull({announce:true});
+      if (result.blocked) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      // Si la caja estaba llena, setBox() ya cambió a la siguiente antes de que
+      // el handler de registro automático procese este mismo ENTER.
+      updateCapacityIndicator();
     }, true);
 
     ['#equipmentLot', '#equipmentBox'].forEach(selector => {
@@ -277,6 +296,11 @@
     getAssignedQuantity: assignedQuantity,
     validateQuantity,
     getCurrentCount: currentCount,
+    prepareNextBoxIfFull,
+    canRegister: () => {
+      const cap = assignedQuantity();
+      return !!cap && currentCount() < cap;
+    },
     refresh: updateCapacityIndicator
   };
 })();
