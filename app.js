@@ -15,6 +15,8 @@
   const id = (prefix, key) => `${prefix}-${String(state[key]++).padStart(6,'0')}`;
   const normHost = v => String(v ?? '').trim().replace(/\s+/g,'').toUpperCase();
   const normUA = v => String(v ?? '').trim().replace(/[-\s]/g,'');
+  const UNKNOWN_UA = '0000000000000000';
+  const isUnknownUA = v => normUA(v) === UNKNOWN_UA;
   const validHost = v => { const x=normHost(v); return {value:x, valid:x.length===12 && x.startsWith('M'), reason:x.length!==12?`Debe tener exactamente 12 caracteres; tiene ${x.length}.`:'Debe comenzar con M mayúscula.'}; };
   const validUA = v => { const x=normUA(v), reasons=[]; if(!/^\d+$/.test(x))reasons.push('solo debe contener dígitos'); if(x.length!==16)reasons.push(`debe tener 16 dígitos; tiene ${x.length}`); if(!x.startsWith('0000'))reasons.push('debe iniciar con 0000'); return {value:x, valid:!reasons.length, reason:reasons.join('; ')}; };
   const normalizeType = v => { const x=String(v??'').toLowerCase(); if(x.includes('carcasa'))return 'Carcasa'; if(x.includes('equipo')||x.includes('placa')||x.includes('modulo')||x.includes('módulo'))return 'Equipo'; if(x.includes('encontr'))return 'Encontrado previo'; return ''; };
@@ -37,14 +39,54 @@
   function findCounterpart(rec){
     const list=pending(opposite(rec.type)).filter(r=>r.host===rec.host);
     if(!list.length)return null;
-    return list.find(r=>r.uaNorm===rec.uaNorm)||list[0];
+    const exact=list.find(r=>r.uaNorm===rec.uaNorm);
+    if(exact)return exact;
+    if(isUnknownUA(rec.uaNorm)){
+      const real=list.filter(r=>!isUnknownUA(r.uaNorm));
+      if(real.length===1)return real[0];
+      if(real.length>1)return null;
+      return list[0];
+    }
+    return list.find(r=>isUnknownUA(r.uaNorm))||list[0];
+  }
+
+  function assignUAFromMatch(target,source,matchId){
+    if(!isUnknownUA(target.uaNorm)||isUnknownUA(source.uaNorm))return false;
+    target.uaBeforeMatch=target.ua;
+    target.ua=source.ua;
+    target.uaNorm=source.uaNorm;
+    target.uaValid=source.uaValid;
+    target.uaAssignedFromMatch=matchId;
+    target.uaAssignedAt=now();
+    target.uaAssignmentSource=source.id;
+    addEvent('Sistema',target.host,target.ua,'UA ASIGNADA POR MATCH',`${target.id} ← ${source.id}`);
+    return true;
   }
 
   function createMatch(a,b,origin='Automático'){
     const carcasa=a.type==='Carcasa'?a:b, equipo=a.type==='Equipo'?a:b;
+    const carcasaWasUnknown=isUnknownUA(carcasa.uaNorm), equipoWasUnknown=isUnknownUA(equipo.uaNorm);
+    const matchId=id('MATCH','matchSeq');
+    let assignment='';
+    if(carcasaWasUnknown&&!equipoWasUnknown&&assignUAFromMatch(carcasa,equipo,matchId)) assignment=`UA ${equipo.ua} asignada automáticamente a Carcasa`;
+    else if(equipoWasUnknown&&!carcasaWasUnknown&&assignUAFromMatch(equipo,carcasa,matchId)) assignment=`UA ${carcasa.ua} asignada automáticamente a Equipo`;
+
+    const bothUnknown=carcasaWasUnknown&&equipoWasUnknown;
     const same=carcasa.uaNorm===equipo.uaNorm;
-    const m={id:id('MATCH','matchSeq'), host:carcasa.host, carcasaId:carcasa.id, equipoId:equipo.id, uaCarcasa:carcasa.ua, uaEquipo:equipo.ua, atCarcasa:carcasa.at, atEquipo:equipo.at, at:now(), status:same?'OK - COINCIDE':'REVISAR - UA NO COINCIDE', origin, voided:false};
-    state.matches.push(m); carcasa.matchId=m.id; equipo.matchId=m.id; carcasa.status=same?'MATCH OK':'REVISAR - UA NO COINCIDE'; equipo.status=carcasa.status; return m;
+    let status='',message='';
+    if(bothUnknown){
+      status='OK - MATCH POR SERIAL · UA PENDIENTE';
+      message='El Serial coincide. Ambos registros tienen UA pendiente (0000000000000000); no se inventó ninguna UA.';
+    }else if(same){
+      status=assignment?'OK - MATCH POR SERIAL · UA ASIGNADA':'OK - COINCIDE';
+      message=assignment?`El Serial coincide. ${assignment}.`:'Host SN y UA coinciden.';
+    }else{
+      status='REVISAR - UA NO COINCIDE';
+      message='El Host SN coincide, pero las UA reales son diferentes.';
+    }
+
+    const m={id:matchId, host:carcasa.host, carcasaId:carcasa.id, equipoId:equipo.id, uaCarcasa:carcasa.ua, uaEquipo:equipo.ua, atCarcasa:carcasa.at, atEquipo:equipo.at, at:now(), status, origin, assignment, message, voided:false};
+    state.matches.push(m); carcasa.matchId=m.id; equipo.matchId=m.id; carcasa.status=status.startsWith('OK')?status.replace(/^OK - /,'MATCH '):status; equipo.status=carcasa.status; return m;
   }
 
   function register(type, hostInput, uaInput, opts={}){
@@ -59,11 +101,12 @@
     if(conflicts.length && !opts.allowConflict) return {ok:false,code:'CONFLICT',title:'HOST SN YA REGISTRADO CON OTRO UA',message:`Ya existe ${hv.value} como ${type} con UA ${conflicts.map(r=>r.ua).join(', ')}.`};
     if(!uv.valid && !opts.allowUA) return {ok:false,code:'UA',title:'ADVERTENCIA - UA NO CUMPLE EL FORMATO',message:uv.reason};
 
-    const rec={id:id('REG','recordSeq'), type, host:hv.value, ua:String(uaInput??'').trim(), uaNorm:uv.value, uaValid:uv.valid, at:opts.at||now(), origin:opts.origin||'Manual', status:pendingText(type), matchId:null, deleted:false};
+    const rawUA=String(uaInput??'').trim();
+    const rec={id:id('REG','recordSeq'), type, host:hv.value, ua:rawUA, uaOriginal:rawUA, uaNorm:uv.value, uaValid:uv.valid, at:opts.at||now(), origin:opts.origin||'Manual', status:pendingText(type), matchId:null, deleted:false};
     state.records.push(rec);
     const cp=findCounterpart(rec); let match=null;
     if(cp) match=createMatch(rec,cp,opts.imported?'Importación automática':'Registro automático');
-    const result=match ? {ok:true,code:match.status.startsWith('OK')?'MATCH_OK':'MATCH_REVIEW',title:match.status.startsWith('OK')?'MATCH CORRECTO':'REVISAR UA',message:match.status.startsWith('OK')?'Host SN y UA coinciden.':'El Host SN coincide, pero el UA es diferente.',record:rec,match} : {ok:true,code:'PENDING',title:'PENDIENTE',message:`No se encontró todavía el ${opposite(type).toLowerCase()} correspondiente.`,record:rec};
+    const result=match ? {ok:true,code:match.status.startsWith('OK')?'MATCH_OK':'MATCH_REVIEW',title:match.status.startsWith('OK')?'MATCH CORRECTO':'REVISAR UA',message:match.message,record:rec,match} : {ok:true,code:'PENDING',title:'PENDIENTE',message:isUnknownUA(rec.uaNorm)?`Serial ${rec.host} registrado con UA pendiente. Se verificará por Serial y la UA se asignará si la contraparte aporta una UA real.`:`No se encontró todavía el ${opposite(type).toLowerCase()} correspondiente.`,record:rec};
     addEvent(type,rec.host,rec.ua,match?match.status:rec.status,match?match.id:'Pendiente'); markDirty(); return result;
   }
 
@@ -88,7 +131,15 @@
 
   function undoMatch(mid,silent=false){
     const m=activeMatches().find(x=>x.id===mid); if(!m)return;
-    m.voided=true; m.voidedAt=now(); [m.carcasaId,m.equipoId].forEach(rid=>{const r=getRecord(rid); if(r){r.matchId=null;r.status=pendingText(r.type);}});
+    m.voided=true; m.voidedAt=now(); [m.carcasaId,m.equipoId].forEach(rid=>{const r=getRecord(rid); if(r){
+      if(r.uaAssignedFromMatch===mid){
+        r.ua=r.uaBeforeMatch||UNKNOWN_UA;
+        r.uaNorm=normUA(r.ua);
+        r.uaValid=validUA(r.ua).valid;
+        delete r.uaBeforeMatch; delete r.uaAssignedFromMatch; delete r.uaAssignedAt; delete r.uaAssignmentSource;
+      }
+      r.matchId=null;r.status=pendingText(r.type);
+    }});
     addEvent('Sistema',m.host,'','MATCH DESHECHO',mid); markDirty(); if(!silent){toast('Match deshecho',mid,'warn');renderAll();}
   }
 
@@ -105,7 +156,9 @@
     if(!hv.valid){toast('HOST SN inválido',hv.reason,'error');return;}
     const dup=activeRecords().find(x=>x.id!==r.id&&x.type===type&&x.host===hv.value&&x.uaNorm===uv.value); if(dup){toast('Duplicado',`La corrección duplicaría ${dup.id}.`,'error');return;}
     if(!uv.valid && !confirm(`${uv.reason}\n\n¿Guardar el UA con advertencia?`))return;
-    r.type=type;r.host=hv.value;r.ua=$('#editUA').value.trim();r.uaNorm=uv.value;r.uaValid=uv.valid;r.matchId=null;r.status=pendingText(type);r.editedAt=now();
+    const editedUA=$('#editUA').value.trim();
+    r.type=type;r.host=hv.value;r.ua=editedUA;r.uaOriginal=editedUA;r.uaNorm=uv.value;r.uaValid=uv.valid;r.matchId=null;r.status=pendingText(type);r.editedAt=now();
+    delete r.uaBeforeMatch; delete r.uaAssignedFromMatch; delete r.uaAssignedAt; delete r.uaAssignmentSource;
     const cp=findCounterpart(r); if(cp)createMatch(r,cp,'Corrección manual'); addEvent(type,r.host,r.ua,'REGISTRO CORREGIDO',r.id); markDirty(); closeModal('editModal'); renderAll(); toast('Registro actualizado',r.id,'ok');
   }
 
@@ -145,13 +198,13 @@
     if(state.view==='all'){const rows=activeRecords().filter(r=>passFilter(r.status,r.type));html=table(['Tipo','Host SN','UA','Fecha/Hora','Estado','Acciones'],rows.map(r=>`<tr><td>${r.type}</td><td class="mono">${r.host}</td><td class="mono">${esc(r.ua)}</td><td>${fmt(r.at)}</td><td><span class="status ${statusClass(r.status)}">${esc(r.status)}</span></td><td class="actions"><button class="action" data-edit="${r.id}">Editar</button><button class="action danger" data-delete="${r.id}">Eliminar</button></td></tr>`));}
     if(state.view==='pending'){html=`<div class="split">${['Carcasa','Equipo'].map(type=>{const list=pending(type).filter(r=>passFilter(r.status,r.type));return `<section><div class="subhead"><h3>${type==='Carcasa'?'CARCASAS':'EQUIPOS'} PENDIENTES</h3><span>${list.length}</span></div>${table(['Host SN','UA','Fecha/Hora','Estado',''],list.map(r=>`<tr><td class="mono">${r.host}</td><td class="mono">${esc(r.ua)}</td><td>${fmt(r.at)}</td><td><span class="status pending">${esc(r.status)}</span></td><td><button class="action" data-edit="${r.id}">Editar</button></td></tr>`))}</section>`;}).join('')}</div>`;}
     if(state.view==='matches'){const list=activeMatches().filter(m=>passFilter(m.status,'Match'));html=table(['ID Match','Host SN','UA Carcasa','UA Equipo','Fecha Match','Estado',''],list.map(m=>`<tr><td class="mono">${m.id}</td><td class="mono">${m.host}</td><td class="mono">${esc(m.uaCarcasa)}</td><td class="mono">${esc(m.uaEquipo)}</td><td>${fmt(m.at)}</td><td><span class="status ${statusClass(m.status)}">${m.status}</span></td><td><button class="action danger" data-undo="${m.id}">Deshacer</button></td></tr>`));}
-    if(state.view==='found'){const rows=[...activeMatches().map(m=>[m.host,m.uaCarcasa,m.uaEquipo,m.status,fmt(m.at),'Match']),...state.found.filter(f=>!f.deleted).map(f=>[f.host,'',f.ua,'ENCONTRADO PREVIO',fmt(f.at),f.origin])];html=table(['Host SN','UA Carcasa','UA Equipo','Resultado','Fecha','Origen'],rows.map(r=>`<tr><td class="mono">${r[0]}</td><td class="mono">${esc(r[1])}</td><td class="mono">${esc(r[2])}</td><td><span class="status ${statusClass(r[3])}">${esc(r[3])}</span></td><td>${r[4]}</td><td>${esc(r[5])}</td></tr>`));}
+    if(state.view==='found'){const rows=[...activeMatches().map(m=>[m.host,m.uaCarcasa,m.uaEquipo,m.status,fmt(m.at),m.assignment?`Match · ${m.assignment}`:'Match']),...state.found.filter(f=>!f.deleted).map(f=>[f.host,'',f.ua,'ENCONTRADO PREVIO',fmt(f.at),f.origin])];html=table(['Host SN','UA Carcasa','UA Equipo','Resultado','Fecha','Origen'],rows.map(r=>`<tr><td class="mono">${r[0]}</td><td class="mono">${esc(r[1])}</td><td class="mono">${esc(r[2])}</td><td><span class="status ${statusClass(r[3])}">${esc(r[3])}</span></td><td>${r[4]}</td><td>${esc(r[5])}</td></tr>`));}
     if(state.view==='review'){const rows=reviewRows();html=table(['Problema','Tipo','Host SN','UA Carcasa','UA Equipo','Descripción','Fecha/Hora'],rows.map(r=>`<tr><td><span class="status warn">${esc(r[0])}</span></td><td>${esc(r[1])}</td><td class="mono">${esc(r[2])}</td><td class="mono">${esc(r[3])}</td><td class="mono">${esc(r[4])}</td><td>${esc(r[5])}</td><td>${esc(r[6])}</td></tr>`));}
     $('#workspaceBody').innerHTML=html; wireActions();
   }
   function wireActions(){$$('[data-edit]').forEach(b=>b.onclick=()=>editRecord(b.dataset.edit));$$('[data-delete]').forEach(b=>b.onclick=()=>deleteRecord(b.dataset.delete));$$('[data-undo]').forEach(b=>b.onclick=()=>{if(confirm(`¿Deshacer ${b.dataset.undo}?`))undoMatch(b.dataset.undo);});}
   function updateCounts(){const c={cRecent:state.events.length,cPending:pending().length,cAll:activeRecords().length,cMatches:activeMatches().length,cFound:activeMatches().length+state.found.filter(f=>!f.deleted).length,cReview:reviewRows().length};Object.entries(c).forEach(([x,v])=>$('#'+x).textContent=v);}
-  function renderSearch(){const q=normUA($('#searchInput').value.toUpperCase());if(!q){$('#searchResults').innerHTML='<div class="empty">Sin búsqueda activa.</div>';return;}const rows=[];activeRecords().forEach(r=>{if(r.host.includes(q)||r.uaNorm.includes(q)){const m=r.matchId?activeMatches().find(x=>x.id===r.matchId):null,cp=m?getRecord(r.type==='Carcasa'?m.equipoId:m.carcasaId):null;rows.push(`<div class="search-card"><div><span class="mini-badge">${r.type}</span> <b class="mono">${r.host}</b></div><div class="mono muted">${esc(r.ua)}</div><div><span class="status ${statusClass(r.status)}">${esc(r.status)}</span></div>${cp?`<div>Contraparte: ${cp.type} · <span class="mono">${esc(cp.ua)}</span></div>`:''}</div>`);}});state.found.filter(f=>!f.deleted).forEach(f=>{if(f.host.includes(q)||f.uaNorm.includes(q))rows.push(`<div class="search-card"><div><span class="mini-badge">Encontrado previo</span> <b class="mono">${f.host}</b></div><div class="mono muted">${esc(f.ua)}</div></div>`);});$('#searchResults').innerHTML=rows.length?rows.join(''):'<div class="empty">No encontrado.</div>';}
+  function renderSearch(){const q=normUA($('#searchInput').value.toUpperCase());if(!q){$('#searchResults').innerHTML='<div class="empty">Sin búsqueda activa.</div>';return;}const rows=[];activeRecords().forEach(r=>{if(r.host.includes(q)||r.uaNorm.includes(q)){const m=r.matchId?activeMatches().find(x=>x.id===r.matchId):null,cp=m?getRecord(r.type==='Carcasa'?m.equipoId:m.carcasaId):null;rows.push(`<div class="search-card"><div><span class="mini-badge">${r.type}</span> <b class="mono">${r.host}</b></div><div class="mono muted">${esc(r.ua)}</div><div><span class="status ${statusClass(r.status)}">${esc(r.status)}</span></div>${r.uaAssignedFromMatch?`<div class="muted">UA asignada automáticamente por ${esc(r.uaAssignedFromMatch)}</div>`:''}${cp?`<div>Contraparte: ${cp.type} · <span class="mono">${esc(cp.ua)}</span></div>`:''}</div>`);}});state.found.filter(f=>!f.deleted).forEach(f=>{if(f.host.includes(q)||f.uaNorm.includes(q))rows.push(`<div class="search-card"><div><span class="mini-badge">Encontrado previo</span> <b class="mono">${f.host}</b></div><div class="mono muted">${esc(f.ua)}</div></div>`);});$('#searchResults').innerHTML=rows.length?rows.join(''):'<div class="empty">No encontrado.</div>';}
   function renderAll(){renderKPIs();updateCounts();renderWorkspace();renderSearch();}
 
   // --------------------------- IMPORTACIÓN EXCEL ---------------------------
@@ -171,7 +224,7 @@
 
   // --------------------------- EXPORTACIÓN EXCEL ---------------------------
   function makeSheet(rows,widths){const ws=XLSX.utils.aoa_to_sheet(rows);ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(0,rows.length-1),c:Math.max(0,rows[0].length-1)}})};ws['!cols']=widths.map(w=>({wch:w}));Object.keys(ws).forEach(a=>{if(a[0]==='!')return;const c=ws[a];if(typeof c.v==='string')c.t='s';});return ws;}
-  function exportExcel(){if(typeof XLSX==='undefined'){toast('Excel no disponible','Recarga la página con conexión a internet.','error');return;}const wb=XLSX.utils.book_new();const totals=[['ID','Tipo','Host SN','UA Original','UA Normalizado','Fecha/Hora','Origen','Estado']];activeRecords().forEach(r=>totals.push([r.id,r.type,r.host,r.ua,r.uaNorm,fmt(r.at),r.origin,r.status]));state.found.filter(f=>!f.deleted).forEach(f=>totals.push([f.id,'Encontrado previo',f.host,f.ua,f.uaNorm,fmt(f.at),f.origin,'ENCONTRADO PREVIO']));const matches=[['ID Match','Host SN','UA Carcasa','UA Equipo','Fecha/Hora Carcasa','Fecha/Hora Equipo','Fecha Match','Estado']];activeMatches().forEach(m=>matches.push([m.id,m.host,m.uaCarcasa,m.uaEquipo,fmt(m.atCarcasa),fmt(m.atEquipo),fmt(m.at),m.status]));const found=[['Host SN','UA Carcasa','UA Equipo','Resultado','Fecha Match']];activeMatches().forEach(m=>found.push([m.host,m.uaCarcasa,m.uaEquipo,m.status,fmt(m.at)]));state.found.filter(f=>!f.deleted).forEach(f=>found.push([f.host,'',f.ua,'ENCONTRADO PREVIO',fmt(f.at)]));const pend=[['Tipo','Host SN','UA','Fecha/Hora','Estado']];pending().forEach(r=>pend.push([r.type,r.host,r.ua,fmt(r.at),r.status]));const rev=[['Tipo de problema','Tipo','Host SN','UA Carcasa','UA Equipo','Descripción','Fecha/Hora'],...reviewRows()];[[totals,'Equipos totales',[14,18,18,24,22,22,38,30]],[matches,'Equipos match',[16,18,24,24,22,22,22,28]],[found,'Equipos encontrados',[18,24,24,28,22]],[pend,'Pendientes',[16,18,24,22,32]],[rev,'Revisar',[30,16,18,26,26,52,22]]].forEach(([rows,name,widths])=>XLSX.utils.book_append_sheet(wb,makeSheet(rows,widths),name));const d=new Date(),p=n=>String(n).padStart(2,'0'),name=`Match_Equipos_${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`;XLSX.writeFile(wb,name,{compression:true});markSaved();toast('Excel exportado',name,'ok');}
+  function exportExcel(){if(typeof XLSX==='undefined'){toast('Excel no disponible','Recarga la página con conexión a internet.','error');return;}const wb=XLSX.utils.book_new();const totals=[['ID','Tipo','Host SN','UA Capturada','UA Actual','UA Normalizado','Fecha/Hora','Origen','Estado','Asignación UA']];activeRecords().forEach(r=>totals.push([r.id,r.type,r.host,r.uaOriginal??r.ua,r.ua,r.uaNorm,fmt(r.at),r.origin,r.status,r.uaAssignedFromMatch?`Asignada por ${r.uaAssignedFromMatch}`:'']));state.found.filter(f=>!f.deleted).forEach(f=>totals.push([f.id,'Encontrado previo',f.host,f.ua,f.ua,f.uaNorm,fmt(f.at),f.origin,'ENCONTRADO PREVIO','']));const matches=[['ID Match','Host SN','UA Carcasa','UA Equipo','Fecha/Hora Carcasa','Fecha/Hora Equipo','Fecha Match','Estado','Asignación UA']];activeMatches().forEach(m=>matches.push([m.id,m.host,m.uaCarcasa,m.uaEquipo,fmt(m.atCarcasa),fmt(m.atEquipo),fmt(m.at),m.status,m.assignment||'']));const found=[['Host SN','UA Carcasa','UA Equipo','Resultado','Fecha Match']];activeMatches().forEach(m=>found.push([m.host,m.uaCarcasa,m.uaEquipo,m.status,fmt(m.at)]));state.found.filter(f=>!f.deleted).forEach(f=>found.push([f.host,'',f.ua,'ENCONTRADO PREVIO',fmt(f.at)]));const pend=[['Tipo','Host SN','UA','Fecha/Hora','Estado']];pending().forEach(r=>pend.push([r.type,r.host,r.ua,fmt(r.at),r.status]));const rev=[['Tipo de problema','Tipo','Host SN','UA Carcasa','UA Equipo','Descripción','Fecha/Hora'],...reviewRows()];[[totals,'Equipos totales',[14,18,18,24,24,22,22,38,34,34]],[matches,'Equipos match',[16,18,24,24,22,22,22,34,42]],[found,'Equipos encontrados',[18,24,24,34,22]],[pend,'Pendientes',[16,18,24,22,32]],[rev,'Revisar',[30,16,18,26,26,52,22]]].forEach(([rows,name,widths])=>XLSX.utils.book_append_sheet(wb,makeSheet(rows,widths),name));const d=new Date(),p=n=>String(n).padStart(2,'0'),name=`Match_Equipos_${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.xlsx`;XLSX.writeFile(wb,name,{compression:true});markSaved();toast('Excel exportado',name,'ok');}
 
   function openModal(id){$('#'+id).classList.add('open');}
   function closeModal(id){$('#'+id).classList.remove('open');}
