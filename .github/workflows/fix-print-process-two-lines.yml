@@ -1,0 +1,60 @@
+name: Fix print process two-line layout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-print-process-two-lines.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Center process and allow maximum two lines
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('equipment-box-print.js')
+          s = p.read_text(encoding='utf-8')
+          old = ".process strong{display:block;margin-top:.018in;min-height:10.5pt;font-size:10pt;line-height:1.05;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
+          new = ".process strong{display:-webkit-box;margin:.018in auto 0;width:100%;max-width:100%;min-height:10.5pt;max-height:20pt;font-size:8.8pt;line-height:1.08;font-weight:800;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:break-word;word-break:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}"
+          if old not in s:
+              raise SystemExit('No se encontró el estilo anterior de ASIGNACIÓN / PROCESO')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          index = Path('index.html')
+          html = index.read_text(encoding='utf-8')
+          old_tag = '<script src="equipment-box-print.js?v=c0e53fa"></script>'
+          new_tag = '<script src="equipment-box-print.js?v=process2line-20260829"></script>'
+          if old_tag not in html:
+              raise SystemExit('No se encontró la versión actual de equipment-box-print.js en index.html')
+          html = html.replace(old_tag, new_tag, 1)
+          index.write_text(html, encoding='utf-8')
+
+      - name: Verify JavaScript and print CSS
+        run: |
+          node --check equipment-box-print.js
+          grep -F -- '-webkit-line-clamp:2' equipment-box-print.js
+          grep -F 'font-size:8.8pt' equipment-box-print.js
+          grep -F 'equipment-box-print.js?v=process2line-20260829' index.html
+          if grep -F 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis' equipment-box-print.js | grep -F '.process strong'; then
+            echo 'Todavía existe el estilo viejo del proceso'
+            exit 1
+          fi
+
+      - name: Commit verified print layout
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add equipment-box-print.js index.html
+          git commit -m "Center box process text on maximum two lines"
+          git push
