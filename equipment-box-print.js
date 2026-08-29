@@ -11,15 +11,6 @@
   let busy = false;
   const autoPrinted = new Set();
 
-  function showToast(title, message, tone = 'ok') {
-    const toast = $('#toast');
-    if (!toast) return;
-    toast.className = `toast show ${tone}`;
-    toast.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(message)}</span>`;
-    clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => toast.classList.remove('show'), 4200);
-  }
-
   function escapeHtml(value) {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -27,6 +18,15 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  function showToast(title, message, tone = 'ok') {
+    const toast = $('#toast');
+    if (!toast) return;
+    toast.className = `toast show ${tone}`;
+    toast.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(message)}</span>`;
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => toast.classList.remove('show'), 4200);
   }
 
   function getRows() {
@@ -74,8 +74,7 @@
     const select = $('#equipmentPrintMode');
     if (!select) return;
     try {
-      const saved = localStorage.getItem(operatorStorageKey());
-      select.value = saved === 'automatic' ? 'automatic' : 'manual';
+      select.value = localStorage.getItem(operatorStorageKey()) === 'automatic' ? 'automatic' : 'manual';
     } catch {
       select.value = 'manual';
     }
@@ -86,18 +85,6 @@
     const values = [...new Set(boxRows.map(row => norm(row.process)).filter(Boolean))];
     if (values.length) return values.join(' / ');
     return norm(window.EquipmentProcess?.getCurrent?.()) || 'Sin asignación';
-  }
-
-  function registrationMode(boxRows) {
-    const values = new Set();
-    boxRows.forEach(row => {
-      const origin = String(row.origin || '');
-      if (/autom[aá]tica/i.test(origin)) values.add('AUTOMÁTICO');
-      else if (/manual/i.test(origin)) values.add('MANUAL');
-      else if (/import/i.test(origin)) values.add('IMPORTADO');
-    });
-    if (!values.size) return 'NO IDENTIFICADO';
-    return values.size === 1 ? [...values][0] : 'MIXTO';
   }
 
   function completionDate(boxRows) {
@@ -122,19 +109,16 @@
       capacity: cap,
       process: processForBox(boxRows),
       operator: operatorName(),
-      registrationMode: registrationMode(boxRows),
       printMode: mode,
-      completedAt: completedAt.toISOString(),
-      serials: boxRows.map(row => norm(row.serial)).filter(Boolean)
+      completedAt: completedAt.toISOString()
     };
   }
 
   function findLatestCompleteBox() {
     const cap = quantity();
     if (!cap) return null;
-    const rows = getRows();
     const groups = new Map();
-    rows.forEach(row => {
+    getRows().forEach(row => {
       const key = `${upper(row.lot)}\u0000${upper(row.box)}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(row);
@@ -145,8 +129,7 @@
       if (group.length < cap) return;
       const snapshot = buildSnapshot(group[0]?.lot, group[0]?.box, cap);
       if (!snapshot) return;
-      const time = new Date(snapshot.completedAt).getTime();
-      if (!best || time > new Date(best.completedAt).getTime()) best = snapshot;
+      if (!best || new Date(snapshot.completedAt).getTime() > new Date(best.completedAt).getTime()) best = snapshot;
     });
     return best;
   }
@@ -161,7 +144,7 @@
     button.disabled = !ready;
     button.textContent = ready ? `Imprimir caja ${lastCompleted.box}` : 'Imprimir caja';
     button.title = ready
-      ? `Caja ${lastCompleted.box} completa · ${lastCompleted.count}/${lastCompleted.capacity} equipos`
+      ? `Caja ${lastCompleted.box} completa · ${lastCompleted.count} equipos`
       : 'Se habilita cuando una caja alcanza la cantidad asignada.';
     select.title = `Modo de impresión: ${modeLabel()}`;
   }
@@ -170,47 +153,44 @@
     const date = new Date(data.completedAt);
     const dateText = date.toLocaleDateString('es-PA');
     const timeText = date.toLocaleTimeString('es-PA', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-    const serialList = data.serials.length
-      ? `<div class="serials"><span>Seriales registrados</span><div>${data.serials.map(escapeHtml).join(' · ')}</div></div>`
-      : '';
 
     return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><title>Caja ${escapeHtml(data.box)}</title>
 <style>
-  @page{margin:7mm}
+  @page{size:2.5in 2in;margin:0}
   *{box-sizing:border-box}
-  body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff}
-  .ticket{width:80mm;max-width:100%;margin:0 auto;border:1.5px solid #000;padding:5mm}
-  h1{font-size:17px;margin:0 0 2px;text-align:center;letter-spacing:.5px}
-  .sub{font-size:10px;text-align:center;margin-bottom:5mm}
-  .process{border:1px solid #000;padding:3mm;margin-bottom:4mm;text-align:center}
-  .process span,.item span,.serials span{display:block;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
-  .process strong{display:block;font-size:14px;margin-top:1mm}
-  .grid{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #000;border-left:1px solid #000}
-  .item{min-height:16mm;padding:3mm;border-right:1px solid #000;border-bottom:1px solid #000}
-  .item strong{display:block;font-size:14px;margin-top:1.5mm;overflow-wrap:anywhere}
-  .item.wide{grid-column:1/-1}
-  .serials{margin-top:4mm;padding-top:3mm;border-top:1px dashed #000;font-size:8px;line-height:1.45;overflow-wrap:anywhere}
-  .foot{margin-top:4mm;text-align:center;font-size:8px}
-  @media print{body{print-color-adjust:exact;-webkit-print-color-adjust:exact}.ticket{border:1.5px solid #000}}
+  html,body{width:2.5in;height:2in;margin:0;padding:0;background:#fff;color:#000}
+  body{font-family:Arial,Helvetica,sans-serif}
+  .label{width:2.5in;height:2in;padding:.10in .12in;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-start}
+  h1{margin:0 0 .045in;text-align:center;font-size:12pt;line-height:1;font-weight:800;letter-spacing:.2px}
+  .process{text-align:center;margin:0 0 .055in;line-height:1.05}
+  .caption{display:block;font-size:5.8pt;line-height:1.05;font-weight:700;text-transform:uppercase;letter-spacing:.25px}
+  .process strong{display:block;margin-top:.018in;font-size:10pt;line-height:1.05;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .data{display:grid;grid-template-columns:1.45fr .55fr;column-gap:.10in;row-gap:.045in;align-items:start}
+  .item{min-width:0}
+  .item strong{display:block;margin-top:.012in;font-size:8.5pt;line-height:1.05;font-weight:800;overflow-wrap:anywhere}
+  .item.operator{grid-column:1/-1}
+  .item.operator strong{font-size:8pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .date-time{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;column-gap:.10in}
+  @media print{
+    html,body,.label{width:2.5in;height:2in}
+    body{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  }
 </style></head><body>
-<section class="ticket">
+<section class="label">
   <h1>REGISTRO DE CAJA</h1>
-  <div class="sub">Cierre de caja por cantidad completada</div>
-  <div class="process"><span>Asignación / Proceso</span><strong>${escapeHtml(data.process)}</strong></div>
-  <div class="grid">
-    <div class="item"><span>Lote</span><strong>${escapeHtml(data.lot)}</strong></div>
-    <div class="item"><span>Caja</span><strong>${escapeHtml(data.box)}</strong></div>
-    <div class="item"><span>N.º de equipos</span><strong>${data.count}</strong></div>
-    <div class="item"><span>Cantidad asignada</span><strong>${data.capacity}</strong></div>
-    <div class="item"><span>Fecha</span><strong>${escapeHtml(dateText)}</strong></div>
-    <div class="item"><span>Hora</span><strong>${escapeHtml(timeText)}</strong></div>
-    <div class="item wide"><span>Operador</span><strong>${escapeHtml(data.operator)}</strong></div>
-    <div class="item"><span>Modo de registro</span><strong>${escapeHtml(data.registrationMode)}</strong></div>
-    <div class="item"><span>Impresión</span><strong>${modeLabel(data.printMode)}</strong></div>
+  <div class="process"><span class="caption">Asignación / Proceso</span><strong>${escapeHtml(data.process)}</strong></div>
+  <div class="data">
+    <div class="item"><span class="caption">Lote</span><strong>${escapeHtml(data.lot)}</strong></div>
+    <div class="item"><span class="caption">Caja</span><strong>${escapeHtml(data.box)}</strong></div>
+    <div class="item"><span class="caption">N.º de equipos</span><strong>${data.count}</strong></div>
+    <div class="item"></div>
+    <div class="date-time">
+      <div class="item"><span class="caption">Fecha</span><strong>${escapeHtml(dateText)}</strong></div>
+      <div class="item"><span class="caption">Hora</span><strong>${escapeHtml(timeText)}</strong></div>
+    </div>
+    <div class="item operator"><span class="caption">Operador</span><strong>${escapeHtml(data.operator)}</strong></div>
   </div>
-  ${serialList}
-  <div class="foot">REGISTRO Y VERIFICACION · Caja completada ${data.count}/${data.capacity}</div>
 </section>
 </body></html>`;
   }
@@ -299,10 +279,10 @@
             document.dispatchEvent(new CustomEvent('equipment:box-complete', {detail:{...completed}}));
 
             if (printMode() === 'automatic' && !autoPrinted.has(completed.key)) {
-              showToast('Caja completa', `Caja ${completed.box}: ${completed.count}/${completed.capacity}. Abriendo impresión automática.`, 'ok');
+              showToast('Caja completa', `Caja ${completed.box}: ${completed.count} equipos. Abriendo impresión automática.`, 'ok');
               openPrint({...completed, printMode:'automatic'}, 'automatic');
             } else {
-              showToast('Caja lista para imprimir', `Caja ${completed.box}: ${completed.count}/${completed.capacity} equipos.`, 'ok');
+              showToast('Caja lista para imprimir', `Caja ${completed.box}: ${completed.count} equipos.`, 'ok');
             }
           }
         }
