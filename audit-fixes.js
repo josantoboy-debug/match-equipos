@@ -15,16 +15,33 @@
     if (!document.querySelector('link[data-theme-control]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = 'theme-control.css?v=56bfc67';
+      link.href = 'theme-control.css?v=253c9d6';
       link.dataset.themeControl = '1';
       document.head.appendChild(link);
     }
     if (window.AppTheme || document.querySelector('script[data-theme-control]')) return;
     const script = document.createElement('script');
-    script.src = 'theme-control.js?v=f061577';
+    script.src = 'theme-control.js?v=188ba0a';
     script.dataset.themeControl = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar theme-control.js');
+    document.head.appendChild(script);
+  }
+
+  function loadTTSControl() {
+    if (!document.querySelector('link[data-tts-control]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'tts-control.css?v=e017d48';
+      link.dataset.ttsControl = '1';
+      document.head.appendChild(link);
+    }
+    if (window.AppTTS || document.querySelector('script[data-tts-control]')) return;
+    const script = document.createElement('script');
+    script.src = 'tts-control.js?v=2680422';
+    script.dataset.ttsControl = '1';
+    script.async = false;
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-control.js');
     document.head.appendChild(script);
   }
 
@@ -136,9 +153,11 @@
   }
 
   loadThemeControl();
+  loadTTSControl();
 
   document.addEventListener('DOMContentLoaded', () => {
     loadThemeControl();
+    loadTTSControl();
     restoreNativeAnchorClick();
     normalizeNumericUAInput();
     guardQuantity();
@@ -151,6 +170,7 @@
 
   document.addEventListener('operator:login', () => {
     loadThemeControl();
+    loadTTSControl();
     restoreNativeAnchorClick();
     guardQuantity();
     loadExportSummary();
@@ -164,6 +184,7 @@
     restoreNativeAnchorClick,
     healthCheck,
     loadThemeControl,
+    loadTTSControl,
     loadExportSummary,
     loadEquipmentNewSession,
     loadEquipmentProcessHistory,
