@@ -2,6 +2,7 @@
   'use strict';
 
   const $ = (selector, root = document) => root.querySelector(selector);
+  const COUNTER_STORAGE_PREFIX = 'matchEquipos.registryProcessCounters';
 
   function esc(value) {
     return String(value ?? '')
@@ -47,25 +48,88 @@
     return window.OperatorSession?.getCurrentOperator?.()?.name || '';
   }
 
-  function buildOrganizedExportName(extension, rows) {
+  function operatorId() {
+    const operator = window.OperatorSession?.getCurrentOperator?.();
+    return safePart(operator?.id || operator?.name || 'DEFAULT', 'DEFAULT', 48);
+  }
+
+  function normalizeProcessBase(value) {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 'SIN PROCESO';
+    return raw.replace(/\s*#\s*\d+\s*$/i, '').trim() || 'SIN PROCESO';
+  }
+
+  function explicitProcessNumber(value) {
+    const match = String(value ?? '').trim().match(/#\s*(\d+)\s*$/i);
+    if (!match) return 0;
+    const n = Number(match[1]);
+    return Number.isSafeInteger(n) && n > 0 ? n : 0;
+  }
+
+  function counterStorageKey() {
+    return `${COUNTER_STORAGE_PREFIX}.${operatorId()}`;
+  }
+
+  function readCounters() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(counterStorageKey()) || '{}');
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function writeCounters(counters) {
+    try {
+      localStorage.setItem(counterStorageKey(), JSON.stringify(counters));
+    } catch {}
+  }
+
+  function processCounterKey(processName) {
+    return safePart(normalizeProcessBase(processName), 'SIN-PROCESO', 80);
+  }
+
+  function reserveProcessSequence(processName) {
+    const counters = readCounters();
+    const key = processCounterKey(processName);
+    const stored = Number(counters[key]) || 0;
+    const explicit = explicitProcessNumber(processName);
+    const next = Math.max(stored, explicit) + 1;
+    counters[key] = next;
+    writeCounters(counters);
+    return next;
+  }
+
+  function sequenceLabel(number) {
+    return `#${String(number).padStart(3, '0')}`;
+  }
+
+  function primaryProcess(rows) {
+    const processes = uniqueValues(rows, 'ASIGNACIÓN / PROCESO');
+    if (processes.length === 1) return processes[0];
+    if (processes.length > 1) return `VARIOS PROCESOS ${processes.length}`;
+    const current = window.EquipmentProcess?.getCurrent?.();
+    return String(current || '').trim() || 'SIN PROCESO';
+  }
+
+  function buildOrganizedExportName(extension, rows, sequence = null) {
     const now = new Date();
     const p = n => String(n).padStart(2, '0');
     const date = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
     const time = `${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
 
-    const processes = uniqueValues(rows, 'ASIGNACIÓN / PROCESO');
+    const processRaw = primaryProcess(rows);
+    const processBase = normalizeProcessBase(processRaw);
+    const processPart = safePart(processBase, 'SIN-PROCESO', 42);
+    const seq = sequence ?? Math.max(1, explicitProcessNumber(processRaw));
+
     const lots = uniqueValues(rows, 'LOTE');
     const boxes = uniqueValues(rows, 'CAJA');
-    const operator = safePart(operatorName(), 'SIN-OPERADOR', 32);
-
-    const processPart = processes.length === 1
-      ? safePart(processes[0], 'SIN-PROCESO', 36)
-      : `VARIOS-PROCESOS-${Math.max(1, processes.length)}`;
     const lotPart = compactDescriptor(lots, 'LOTE', 'VARIOS-LOTES');
     const boxPart = compactDescriptor(boxes, 'CAJA', 'VARIAS-CAJAS');
     const countPart = `${rows.length}-EQ`;
 
-    return `${date}_REGISTRO_${processPart}_${lotPart}_${boxPart}_${countPart}_${operator}_${time}.${extension}`;
+    return `${processPart}_${sequenceLabel(seq)}_${lotPart}_${boxPart}_${countPart}_${date}_${time}.${extension}`;
   }
 
   function formatDate(value) {
@@ -196,21 +260,24 @@
         const headers = Object.keys(rows[0]);
         payload = [
           headers.map(csvEscape).join(','),
-          ...rows.map(row => headers.map(header => csvEscape(row[header])).join(',') )
+          ...rows.map(row => headers.map(header => csvEscape(row[header])).join(','))
         ].join('\r\n');
         mime = 'text/csv;charset=utf-8';
       }
 
-      const filename = buildOrganizedExportName(format, rows);
+      const processName = primaryProcess(rows);
+      const sequence = reserveProcessSequence(processName);
+      const filename = buildOrganizedExportName(format, rows, sequence);
+
       if (format === 'xlsx') nativeDownload(payload, filename);
       else downloadText(payload, mime, filename);
 
       window.OperatorSession?.saveNow?.();
       document.dispatchEvent(new CustomEvent('equipment:registry-exported', {
-        detail: {filename, format, count: rows.length}
+        detail: {filename, format, count: rows.length, process: normalizeProcessBase(processName), sequence}
       }));
       showToast('Registro descargado', `${filename} · ${rows.length} equipos.`, 'ok');
-      return {filename, format, count: rows.length};
+      return {filename, format, count: rows.length, process: normalizeProcessBase(processName), sequence};
     } catch (error) {
       console.error('[registry-export]', error);
       showToast('Error al descargar registro', error?.message || String(error), 'error');
@@ -255,6 +322,10 @@
       }, 20);
     }, true);
 
-    window.RegistryExport = {exportRegistry, buildOrganizedExportName};
+    window.RegistryExport = {
+      exportRegistry,
+      buildOrganizedExportName,
+      getProcessCounters: readCounters
+    };
   });
 })();
