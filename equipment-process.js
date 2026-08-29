@@ -10,12 +10,6 @@
   let observer = null;
 
   const norm = value => String(value ?? '').trim().replace(/\s+/g, ' ');
-  const esc = value => String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 
   function rowKey(row) {
     return [row?.lot, row?.serial, row?.ua, row?.box].map(value => norm(value).toUpperCase()).join('\u0001');
@@ -104,7 +98,8 @@
         if (lotCell?.nextSibling) tr.insertBefore(cell, lotCell.nextSibling);
         else tr.appendChild(cell);
       }
-      cell.textContent = process || '—';
+      const display = process || '—';
+      if (cell.textContent !== display) cell.textContent = display;
       cell.title = process || 'Sin asignación / proceso';
     });
 
@@ -118,7 +113,8 @@
     const box = norm($('#equipmentBox')?.value).toUpperCase();
     if (!label || !box) return;
     const process = currentProcess();
-    label.textContent = `${lot || 'Sin lote'} · ${box}${process ? ` · ${process}` : ''}`;
+    const next = `${lot || 'Sin lote'} · ${box}${process ? ` · ${process}` : ''}`;
+    if (label.textContent !== next) label.textContent = next;
   }
 
   function patchRegistryApi() {
