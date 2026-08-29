@@ -104,6 +104,7 @@
     const rawUA=String(uaInput??'').trim();
     const rec={id:id('REG','recordSeq'), type, host:hv.value, ua:rawUA, uaOriginal:rawUA, uaNorm:uv.value, uaValid:uv.valid, at:opts.at||now(), origin:opts.origin||'Manual', status:pendingText(type), matchId:null, deleted:false};
     state.records.push(rec);
+    document.dispatchEvent(new CustomEvent('app:record-created',{detail:{localId:rec.id,type:rec.type,host:rec.host,ua:rec.ua,origin:rec.origin,at:rec.at}}));
     const cp=findCounterpart(rec); let match=null;
     if(cp) match=createMatch(rec,cp,opts.imported?'Importación automática':'Registro automático');
     const result=match ? {ok:true,code:match.status.startsWith('OK')?'MATCH_OK':'MATCH_REVIEW',title:match.status.startsWith('OK')?'MATCH CORRECTO':'REVISAR UA',message:match.message,record:rec,match} : {ok:true,code:'PENDING',title:'PENDIENTE',message:isUnknownUA(rec.uaNorm)?`Serial ${rec.host} registrado con UA pendiente. Se verificará por Serial y la UA se asignará si la contraparte aporta una UA real.`:`No se encontró todavía el ${opposite(type).toLowerCase()} correspondiente.`,record:rec};
@@ -140,7 +141,7 @@
       }
       r.matchId=null;r.status=pendingText(r.type);
     }});
-    addEvent('Sistema',m.host,'','MATCH DESHECHO',mid); markDirty(); if(!silent){toast('Match deshecho',mid,'warn');renderAll();}
+    addEvent('Sistema',m.host,'','MATCH DESHECHO',mid); document.dispatchEvent(new CustomEvent('app:match-undone',{detail:{localMatchId:mid,host:m.host,carcasaId:m.carcasaId,equipoId:m.equipoId}})); markDirty(); if(!silent){toast('Match deshecho',mid,'warn');renderAll();}
   }
 
   function editRecord(rid){
@@ -152,6 +153,7 @@
 
   function saveEdit(){
     const r=getRecord($('#editId').value); if(!r)return;
+    const beforeEdit={type:r.type,host:r.host,ua:r.ua};
     const type=$('#editType').value, hv=validHost($('#editHost').value), uv=validUA($('#editUA').value);
     if(!hv.valid){toast('HOST SN inválido',hv.reason,'error');return;}
     const dup=activeRecords().find(x=>x.id!==r.id&&x.type===type&&x.host===hv.value&&x.uaNorm===uv.value); if(dup){toast('Duplicado',`La corrección duplicaría ${dup.id}.`,'error');return;}
@@ -159,12 +161,12 @@
     const editedUA=$('#editUA').value.trim();
     r.type=type;r.host=hv.value;r.ua=editedUA;r.uaOriginal=editedUA;r.uaNorm=uv.value;r.uaValid=uv.valid;r.matchId=null;r.status=pendingText(type);r.editedAt=now();
     delete r.uaBeforeMatch; delete r.uaAssignedFromMatch; delete r.uaAssignedAt; delete r.uaAssignmentSource;
-    const cp=findCounterpart(r); if(cp)createMatch(r,cp,'Corrección manual'); addEvent(type,r.host,r.ua,'REGISTRO CORREGIDO',r.id); markDirty(); closeModal('editModal'); renderAll(); toast('Registro actualizado',r.id,'ok');
+    const cp=findCounterpart(r); if(cp)createMatch(r,cp,'Corrección manual'); addEvent(type,r.host,r.ua,'REGISTRO CORREGIDO',r.id); document.dispatchEvent(new CustomEvent('app:record-edited',{detail:{localId:r.id,before:beforeEdit,after:{type:r.type,host:r.host,ua:r.ua},editedAt:r.editedAt}})); markDirty(); closeModal('editModal'); renderAll(); toast('Registro actualizado',r.id,'ok');
   }
 
   function deleteRecord(rid){
     const r=getRecord(rid); if(!r)return; if(!confirm(`¿Eliminar ${r.id}\n${r.host} / ${r.ua}?`))return;
-    if(r.matchId)undoMatch(r.matchId,true); r.deleted=true;r.deletedAt=now();addEvent(r.type,r.host,r.ua,'REGISTRO ELIMINADO',r.id);markDirty();renderAll();toast('Registro eliminado',r.id,'warn');
+    if(r.matchId)undoMatch(r.matchId,true); r.deleted=true;r.deletedAt=now();addEvent(r.type,r.host,r.ua,'REGISTRO ELIMINADO',r.id);document.dispatchEvent(new CustomEvent('app:record-deleted',{detail:{localId:r.id,type:r.type,host:r.host,ua:r.ua,deletedAt:r.deletedAt}}));markDirty();renderAll();toast('Registro eliminado',r.id,'warn');
   }
 
   function addFound(host,ua,origin){
