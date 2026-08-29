@@ -461,7 +461,7 @@
   function installLifecycleAnnouncements() {
     document.addEventListener('operator:login', event => {
       const name = normalizeSpace(event.detail?.name);
-      announce(name ? `Sesión iniciada. Operador ${name}.` : 'Sesión iniciada.', {priority:'high', key:`operator-login:${name}`, dedupeMs:1500});
+      announce(name ? `Bienvenida ${name}` : 'Bienvenida', {priority:'high', interrupt:true, key:`operator-login:${name}`, dedupeMs:1500});
       setTimeout(installLoginControl, 0);
     });
 
