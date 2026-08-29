@@ -186,7 +186,7 @@
   h1{margin:0 0 .045in;text-align:center;font-size:12pt;line-height:1;font-weight:800;letter-spacing:.2px}
   .process{text-align:center;margin:0 0 .055in;line-height:1.05}
   .caption{display:block;font-size:5.8pt;line-height:1.05;font-weight:700;text-transform:uppercase;letter-spacing:.25px}
-  .process strong{display:block;margin-top:.018in;min-height:10.5pt;font-size:10pt;line-height:1.05;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .process strong{display:-webkit-box;margin:.018in auto 0;width:100%;max-width:100%;min-height:10.5pt;max-height:20pt;font-size:8.8pt;line-height:1.08;font-weight:800;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:break-word;word-break:normal;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
   .data{display:grid;grid-template-columns:1.45fr .55fr;column-gap:.10in;row-gap:.045in;align-items:start}
   .item{min-width:0}
   .item strong{display:block;margin-top:.012in;min-height:9pt;font-size:8.5pt;line-height:1.05;font-weight:800;overflow-wrap:anywhere}
