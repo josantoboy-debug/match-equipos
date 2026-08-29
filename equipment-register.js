@@ -20,6 +20,7 @@
 
   const normSerial = value => String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
   const normUA = value => String(value ?? '').trim().replace(/[-\s]/g, '');
+  const UNKNOWN_UA = '0000000000000000';
   const normText = value => String(value ?? '').trim();
   const fmt = value => new Date(value).toLocaleString('es-PA');
 
@@ -133,8 +134,10 @@
     const active = registry.rows.filter(row => row.id !== excludeId);
     const sameSerial = active.find(row => row.serial === serial);
     if (sameSerial) return `El SERIAL ${serial} ya está registrado en Lote ${sameSerial.lot}, Caja ${sameSerial.box}.`;
-    const sameUA = active.find(row => row.ua === ua);
-    if (sameUA) return `El UA ${ua} ya está registrado con el Serial ${sameUA.serial}.`;
+    if (ua !== UNKNOWN_UA) {
+      const sameUA = active.find(row => row.ua === ua);
+      if (sameUA) return `El UA ${ua} ya está registrado con el Serial ${sameUA.serial}.`;
+    }
     return '';
   }
 
