@@ -85,8 +85,7 @@ jobs:
                   this.onerror = null;
                 }
               }
-              window.SpeechSynthesisUtterance = MockUtterance;
-              window.speechSynthesis = {
+              const mockSpeech = {
                 getVoices: () => [{name:'Mock Spanish Panama', lang:'es-PA', default:true}],
                 speak: utterance => {
                   window.__spoken.push(utterance.text);
@@ -98,11 +97,15 @@ jobs:
                 cancel: () => {},
                 addEventListener: () => {}
               };
+              try { delete window.SpeechSynthesisUtterance; } catch {}
+              try { delete window.speechSynthesis; } catch {}
+              Object.defineProperty(window, 'SpeechSynthesisUtterance', {configurable:true, writable:true, value:MockUtterance});
+              Object.defineProperty(window, 'speechSynthesis', {configurable:true, get:() => mockSpeech});
             });
 
             const pageErrors = [];
             page.on('pageerror', error => pageErrors.push(String(error)));
-            await page.goto('http://127.0.0.1:4173/?tts-smoke=1', {waitUntil:'domcontentloaded', timeout:15000});
+            await page.goto('http://127.0.0.1:4173/?tts-smoke=2', {waitUntil:'domcontentloaded', timeout:15000});
             await page.waitForSelector('#ttsToggleBtn', {timeout:5000});
             await page.waitForSelector('#ttsLoginControl', {timeout:5000});
 
@@ -110,8 +113,10 @@ jobs:
               supported: window.MatchVoiceTTS?.supported,
               enabled: window.MatchVoiceTTS?.isEnabled?.(),
               loginText: document.querySelector('#ttsLoginToggle')?.textContent,
-              voice: window.MatchVoiceTTS?.getVoice?.()
+              voice: window.MatchVoiceTTS?.getVoice?.(),
+              mocked: window.speechSynthesis?.getVoices?.()?.[0]?.name
             }));
+            assert.strictEqual(apiState.mocked, 'Mock Spanish Panama', 'Speech synthesis mock must be active');
             assert.strictEqual(apiState.supported, true, 'TTS API should report supported with mock engine');
             assert.strictEqual(apiState.enabled, true, 'TTS should default to enabled');
             assert.match(apiState.loginText || '', /ACTIVADA/i, 'Login TTS control should show ACTIVADA');
