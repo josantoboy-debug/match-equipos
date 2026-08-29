@@ -9,8 +9,8 @@
     const normalized = normSerial(value);
     if (!normalized) return {valid:false, value:normalized, message:'El SERIAL es obligatorio.'};
     if (!normalized.startsWith('M')) return {valid:false, value:normalized, message:'El SERIAL debe iniciar con M.'};
-    if (normalized.length !== 12) return {valid:false, value:normalized, message:`El SERIAL debe tener exactamente 12 caracteres; tiene ${normalized.length}.`};
-    if (!/^M[A-Z0-9]{11}$/.test(normalized)) return {valid:false, value:normalized, message:'El SERIAL solo puede contener letras y números después de M.'};
+    if (normalized.length !== 12) return {valid:false, value:normalized, message:`El SERIAL debe ser M + 11 caracteres alfanuméricos (12 en total); tiene ${normalized.length}.`};
+    if (!/^M[A-Z0-9]{11}$/.test(normalized)) return {valid:false, value:normalized, message:'Después de M solo se permiten 11 letras o números.'};
     return {valid:true, value:normalized, message:''};
   }
 
@@ -19,7 +19,8 @@
     if (!normalized) return {valid:false, value:normalized, message:'La UA / Unit Address es obligatoria.'};
     if (!/^\d+$/.test(normalized)) return {valid:false, value:normalized, message:'La UA / Unit Address solo puede contener dígitos.'};
     if (!normalized.startsWith('0000')) return {valid:false, value:normalized, message:'La UA / Unit Address debe iniciar con 0000.'};
-    if (normalized.length !== 16) return {valid:false, value:normalized, message:`La UA / Unit Address debe tener exactamente 16 dígitos; tiene ${normalized.length}.`};
+    if (normalized.length !== 18) return {valid:false, value:normalized, message:`La UA debe ser 0000 + 14 dígitos (18 en total); tiene ${normalized.length}.`};
+    if (!/^0000\d{14}$/.test(normalized)) return {valid:false, value:normalized, message:'La UA debe cumplir exactamente el formato 0000 + 14 dígitos.'};
     return {valid:true, value:normalized, message:''};
   }
 
@@ -39,18 +40,15 @@
     panel.innerHTML = `<span class="equipment-validation-icon">×</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></div>`;
   }
 
-  function keepInField(input, result, title) {
+  function clearInvalidField(input, result, title) {
     if (!input) return;
-    input.value = result.value;
-    input.classList.remove('field-valid');
+    input.value = '';
+    input.classList.remove('field-valid', 'field-invalid');
     input.classList.add('field-invalid');
-    setMessage(title, `${result.message} Corrige este campo para continuar.`);
+    setMessage(title, `${result.message} El dato se borró automáticamente; vuelve a escanear o escribir.`);
     requestAnimationFrame(() => {
       input.focus({preventScroll:true});
-      try {
-        const end = input.value.length;
-        input.setSelectionRange(end, end);
-      } catch {}
+      try { input.setSelectionRange(0, 0); } catch {}
     });
   }
 
@@ -71,7 +69,7 @@
     }
     event.preventDefault();
     event.stopImmediatePropagation();
-    keepInField(input, result, 'SERIAL inválido');
+    clearInvalidField(input, result, 'SERIAL inválido');
     return true;
   }
 
@@ -85,7 +83,7 @@
     }
     event.preventDefault();
     event.stopImmediatePropagation();
-    keepInField(input, result, 'UA inválida');
+    clearInvalidField(input, result, 'UA inválida');
     return true;
   }
 
@@ -99,7 +97,7 @@
     if (!serialCheck.valid) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      keepInField(serial, serialCheck, 'SERIAL inválido');
+      clearInvalidField(serial, serialCheck, 'SERIAL inválido');
       return;
     }
     markValid(serial, serialCheck);
@@ -108,7 +106,7 @@
     if (!uaCheck.valid) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      keepInField(ua, uaCheck, 'UA inválida');
+      clearInvalidField(ua, uaCheck, 'UA inválida');
       return;
     }
     markValid(ua, uaCheck);
@@ -119,7 +117,11 @@
     const ua = $('#equipmentUA');
     if (serial && serial.dataset.strictStayInstalled !== '1') {
       serial.dataset.strictStayInstalled = '1';
+      serial.maxLength = 12;
+      serial.title = 'Formato: M + 11 caracteres alfanuméricos.';
       serial.addEventListener('input', () => {
+        const normalized = normSerial(serial.value).replace(/[^A-Z0-9]/g, '').slice(0, 12);
+        if (serial.value !== normalized) serial.value = normalized;
         const result = serialResult(serial.value);
         serial.classList.toggle('field-invalid', !!serial.value && !result.valid);
         serial.classList.toggle('field-valid', result.valid);
@@ -127,7 +129,12 @@
     }
     if (ua && ua.dataset.strictStayInstalled !== '1') {
       ua.dataset.strictStayInstalled = '1';
+      ua.maxLength = 18;
+      ua.inputMode = 'numeric';
+      ua.title = 'Formato: 0000 + 14 dígitos (18 dígitos en total).';
       ua.addEventListener('input', () => {
+        const normalized = String(ua.value || '').replace(/\D/g, '').slice(0, 18);
+        if (ua.value !== normalized) ua.value = normalized;
         const result = uaResult(ua.value);
         ua.classList.toggle('field-invalid', !!ua.value && !result.valid);
         ua.classList.toggle('field-valid', result.valid);
