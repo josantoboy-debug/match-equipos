@@ -72,7 +72,7 @@
       return;
     }
     const script = document.createElement('script');
-    script.src = 'equipment-new-session.js?v=assigned-qty';
+    script.src = 'equipment-new-session.js?v=af744ee';
     script.dataset.equipmentNewSession = '1';
     script.async = false;
     script.onload = () => window.EquipmentNewSession?.install?.();
@@ -93,7 +93,7 @@
   function loadEquipmentImportContext() {
     if (window.EquipmentImportContext || document.querySelector('script[data-equipment-import-context]')) return;
     const script = document.createElement('script');
-    script.src = 'equipment-import-context.js?v=a601d89';
+    script.src = 'equipment-import-context.js?v=1f7237f';
     script.dataset.equipmentImportContext = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-import-context.js');
