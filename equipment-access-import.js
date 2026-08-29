@@ -3,6 +3,7 @@
 
   const $ = selector => document.querySelector(selector);
   const UNKNOWN_UA = '0000000000000000';
+  const MAX_PER_BOX = 64;
   let converting = false;
 
   const escapeHtml = value => String(value ?? '')
@@ -92,7 +93,7 @@
     if (!context.process) missing.push('ASIGNACIÓN / PROCESO');
     if (!context.lot) missing.push('LOTE');
     if (!context.box) missing.push('CAJA');
-    if (!Number.isSafeInteger(context.quantity) || context.quantity < 1 || context.quantity > 100000) missing.push('CANTIDAD');
+    if (!Number.isSafeInteger(context.quantity) || context.quantity < 1 || context.quantity > MAX_PER_BOX) missing.push(`CANTIDAD (1-${MAX_PER_BOX})`);
     if (missing.length) {
       throw new Error(`Antes de importar Access completa: ${missing.join(', ')}.`);
     }
@@ -159,7 +160,6 @@
     if (!mapping.serial) mapping.serial = inferColumn(columnNames, data, validSerial, mapping.ua);
     if (!mapping.ua) mapping.ua = inferColumn(columnNames, data, validUA, mapping.serial);
 
-    // Segunda pasada por patrón para archivos Access con Campo1/Campo2 y captions genéricos.
     if (!mapping.serial || !mapping.ua || mapping.serial === mapping.ua) {
       const serial = inferColumn(columnNames, data, validSerial, null);
       const ua = inferColumn(columnNames, data, validUA, serial);
@@ -293,7 +293,7 @@
       const boxes = [...new Set(parsed.records.map(row => row.box))];
       showToast(
         'ACCDB leído',
-        `${parsed.records.length} equipos · Lote ${parsed.context.lot} · Caja${boxes.length === 1 ? '' : 's'} ${boxes.join(', ')}.`,
+        `${parsed.records.length} equipos · Lote ${parsed.context.lot} · Caja${boxes.length === 1 ? '' : 's'} ${boxes.join(', ')} · ${parsed.context.quantity} por caja.`,
         'ok'
       );
       replaceWithJson(input, file, parsed);
@@ -322,7 +322,7 @@
     if (!String(input.accept || '').toLowerCase().includes('.accdb')) {
       input.accept = `${input.accept ? `${input.accept},` : ''}.accdb,application/msaccess,application/x-msaccess,application/vnd.ms-access`;
     }
-    if (button) button.title = 'ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y Cantidad desde la pantalla.';
+    if (button) button.title = `ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y CANTIDAD desde la pantalla. Máximo ${MAX_PER_BOX}.`;
 
     if (input.dataset.accdbImportInstalled === '1') return;
     input.dataset.accdbImportInstalled = '1';
