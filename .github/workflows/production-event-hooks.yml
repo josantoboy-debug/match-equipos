@@ -1,0 +1,65 @@
+name: Add production data event hooks
+
+on:
+  push:
+    branches: [production/supabase-v1]
+    paths:
+      - '.github/workflows/production-event-hooks.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add non-invasive domain events
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('app.js')
+          s=p.read_text(encoding='utf-8')
+          if "app:record-created" not in s:
+              old="    state.records.push(rec);\n    const cp=findCounterpart(rec); let match=null;"
+              new="    state.records.push(rec);\n    document.dispatchEvent(new CustomEvent('app:record-created',{detail:{localId:rec.id,type:rec.type,host:rec.host,ua:rec.ua,origin:rec.origin,at:rec.at}}));\n    const cp=findCounterpart(rec); let match=null;"
+              if old not in s: raise SystemExit('register hook anchor missing')
+              s=s.replace(old,new,1)
+          if "app:match-undone" not in s:
+              old="    addEvent('Sistema',m.host,'','MATCH DESHECHO',mid); markDirty(); if(!silent){toast('Match deshecho',mid,'warn');renderAll();}"
+              new="    addEvent('Sistema',m.host,'','MATCH DESHECHO',mid); document.dispatchEvent(new CustomEvent('app:match-undone',{detail:{localMatchId:mid,host:m.host,carcasaId:m.carcasaId,equipoId:m.equipoId}})); markDirty(); if(!silent){toast('Match deshecho',mid,'warn');renderAll();}"
+              if old not in s: raise SystemExit('undo hook anchor missing')
+              s=s.replace(old,new,1)
+          if "const beforeEdit={type:r.type,host:r.host,ua:r.ua};" not in s:
+              old="  function saveEdit(){\n    const r=getRecord($('#editId').value); if(!r)return;"
+              new="  function saveEdit(){\n    const r=getRecord($('#editId').value); if(!r)return;\n    const beforeEdit={type:r.type,host:r.host,ua:r.ua};"
+              if old not in s: raise SystemExit('edit snapshot anchor missing')
+              s=s.replace(old,new,1)
+          if "app:record-edited" not in s:
+              old="    const cp=findCounterpart(r); if(cp)createMatch(r,cp,'Corrección manual'); addEvent(type,r.host,r.ua,'REGISTRO CORREGIDO',r.id); markDirty(); closeModal('editModal'); renderAll(); toast('Registro actualizado',r.id,'ok');"
+              new="    const cp=findCounterpart(r); if(cp)createMatch(r,cp,'Corrección manual'); addEvent(type,r.host,r.ua,'REGISTRO CORREGIDO',r.id); document.dispatchEvent(new CustomEvent('app:record-edited',{detail:{localId:r.id,before:beforeEdit,after:{type:r.type,host:r.host,ua:r.ua},editedAt:r.editedAt}})); markDirty(); closeModal('editModal'); renderAll(); toast('Registro actualizado',r.id,'ok');"
+              if old not in s: raise SystemExit('edit hook anchor missing')
+              s=s.replace(old,new,1)
+          if "app:record-deleted" not in s:
+              old="    if(r.matchId)undoMatch(r.matchId,true); r.deleted=true;r.deletedAt=now();addEvent(r.type,r.host,r.ua,'REGISTRO ELIMINADO',r.id);markDirty();renderAll();toast('Registro eliminado',r.id,'warn');"
+              new="    if(r.matchId)undoMatch(r.matchId,true); r.deleted=true;r.deletedAt=now();addEvent(r.type,r.host,r.ua,'REGISTRO ELIMINADO',r.id);document.dispatchEvent(new CustomEvent('app:record-deleted',{detail:{localId:r.id,type:r.type,host:r.host,ua:r.ua,deletedAt:r.deletedAt}}));markDirty();renderAll();toast('Registro eliminado',r.id,'warn');"
+              if old not in s: raise SystemExit('delete hook anchor missing')
+              s=s.replace(old,new,1)
+          p.write_text(s,encoding='utf-8')
+      - name: Verify syntax and hooks
+        run: |
+          node --check app.js
+          grep -F "app:record-created" app.js
+          grep -F "app:record-edited" app.js
+          grep -F "app:record-deleted" app.js
+          grep -F "app:match-undone" app.js
+      - name: Commit hooks
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Emit production synchronization events from local match state"
+          git push
