@@ -67,6 +67,16 @@
     document.body.appendChild(script);
   }
 
+  function loadEquipmentProcessHistory() {
+    if (window.EquipmentProcessHistory || document.querySelector('script[data-equipment-process-history]')) return;
+    const script = document.createElement('script');
+    script.src = 'equipment-process-history.js?v=db607d6';
+    script.dataset.equipmentProcessHistory = '1';
+    script.async = false;
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-process-history.js');
+    document.body.appendChild(script);
+  }
+
   function healthCheck() {
     const problems = [];
     if (!window.EquipmentRegistry) problems.push('EquipmentRegistry');
@@ -93,6 +103,7 @@
     guardQuantity();
     loadExportSummary();
     loadEquipmentNewSession();
+    loadEquipmentProcessHistory();
     setTimeout(healthCheck, 0);
   });
 
@@ -100,6 +111,7 @@
     restoreNativeAnchorClick();
     loadExportSummary();
     loadEquipmentNewSession();
+    loadEquipmentProcessHistory();
     setTimeout(healthCheck, 0);
   });
 
@@ -107,6 +119,7 @@
     restoreNativeAnchorClick,
     healthCheck,
     loadExportSummary,
-    loadEquipmentNewSession
+    loadEquipmentNewSession,
+    loadEquipmentProcessHistory
   };
 })();
