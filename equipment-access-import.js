@@ -18,7 +18,7 @@
     toast.className = `toast show ${tone}`;
     toast.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(message)}</span>`;
     clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => toast.classList.remove('show'), 5200);
+    showToast.timer = setTimeout(() => toast.classList.remove('show'), 5600);
   }
 
   function setMessage(tone, title, detail) {
@@ -41,45 +41,17 @@
   }
 
   const aliases = {
-    lot: [
-      'lote', 'lot', 'batch', 'lote no', 'lote numero', 'numero lote',
-      'lot no', 'lot number', 'batch no', 'batch number'
-    ],
     serial: [
       'serial', 'serial no', 'serial number', 'serialnumber', 'sr', 'sn',
       'host', 'host sn', 'hostsn', 'host serial', 'host serial number'
     ],
     ua: [
       'ua', 'unit address', 'unitaddress', 'ua unit address', 'ua original',
-      'unit addr', 'unit address no', 'unit address number'
-    ],
-    box: [
-      'caja', 'box', 'carton', 'caja no', 'caja numero', 'numero caja',
-      'box no', 'box number', 'carton no', 'carton number'
-    ],
-    process: [
-      'process', 'proceso', 'asignacion', 'asignacion proceso', 'assignment',
-      'tipo proceso', 'proceso actual', 'asignacion actual'
+      'unit addr', 'unit address no', 'unit address number', 'unit andress'
     ]
   };
 
-  function resolveColumns(columnNames) {
-    const normalized = columnNames.map(name => ({name, normalized: normalizeHeader(name)}));
-    const find = names => normalized.find(item => names.includes(item.normalized))?.name || null;
-    const mapping = {
-      lot: find(aliases.lot),
-      serial: find(aliases.serial),
-      ua: find(aliases.ua),
-      box: find(aliases.box),
-      process: find(aliases.process)
-    };
-    return mapping.lot && mapping.serial && mapping.ua && mapping.box ? mapping : null;
-  }
-
-  function cellValue(row, column) {
-    if (!column || !row) return '';
-    return row[column] ?? '';
-  }
+  const normalizeSerial = value => String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
 
   function normalizeUA(value) {
     if (value === null || value === undefined || String(value).trim() === '') return UNKNOWN_UA;
@@ -87,14 +59,113 @@
       const text = String(Math.trunc(value));
       return /^\d{1,16}$/.test(text) ? text.padStart(16, '0') : text;
     }
-    const raw = String(value).trim().replace(/[-\s]/g, '');
+    const raw = String(value).trim().replace(/[-\s]/g, '').replace(/&$/, '');
     if (/^\d{1,16}$/.test(raw)) return raw.padStart(16, '0');
     return raw;
   }
 
   function normalizeText(value) {
-    if (value === null || value === undefined) return '';
-    return String(value).trim();
+    return value === null || value === undefined ? '' : String(value).trim();
+  }
+
+  function validSerial(value) {
+    return /^M[A-Z0-9]{11}$/.test(normalizeSerial(value));
+  }
+
+  function validUA(value) {
+    const ua = normalizeUA(value);
+    return /^0000\d{12}$/.test(ua);
+  }
+
+  function currentContext() {
+    const process = normalizeText(window.EquipmentProcess?.getCurrent?.() || $('#equipmentProcess')?.value);
+    const lot = normalizeText($('#equipmentLot')?.value).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    const box = normalizeText($('#equipmentBox')?.value);
+    const quantityRaw = normalizeText($('#equipmentQuantity')?.value);
+    const quantity = /^\d+$/.test(quantityRaw) ? Number(quantityRaw) : 0;
+    return {process, lot, box, quantity};
+  }
+
+  function validateContext() {
+    const context = currentContext();
+    const missing = [];
+    if (!context.process) missing.push('ASIGNACIÓN / PROCESO');
+    if (!context.lot) missing.push('LOTE');
+    if (!context.box) missing.push('CAJA');
+    if (!Number.isSafeInteger(context.quantity) || context.quantity < 1 || context.quantity > 100000) missing.push('CANTIDAD');
+    if (missing.length) {
+      throw new Error(`Antes de importar Access completa: ${missing.join(', ')}.`);
+    }
+    return context;
+  }
+
+  function incrementBoxName(value) {
+    const original = normalizeText(value);
+    if (!original) return '1';
+    const match = original.match(/^(.*?)(\d+)$/);
+    if (!match) return `${original}-2`;
+    return `${match[1]}${String(Number(match[2]) + 1).padStart(match[2].length, '0')}`;
+  }
+
+  function allocationCounts(lot) {
+    const counts = new Map();
+    const rows = window.EquipmentRegistry?.getRows?.() || [];
+    rows.forEach(row => {
+      if (normalizeText(row.lot).toUpperCase() !== lot.toUpperCase()) return;
+      const key = normalizeText(row.box).toUpperCase();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }
+
+  function assignBox(context, counts) {
+    let candidate = context.box;
+    let guard = 0;
+    while ((counts.get(candidate.toUpperCase()) || 0) >= context.quantity && guard < 10000) {
+      candidate = incrementBoxName(candidate);
+      guard++;
+    }
+    if (guard >= 10000) throw new Error('No se pudo calcular la siguiente caja disponible.');
+    const key = candidate.toUpperCase();
+    counts.set(key, (counts.get(key) || 0) + 1);
+    return candidate;
+  }
+
+  function namedMapping(columnNames) {
+    const normalized = columnNames.map(name => ({name, normalized: normalizeHeader(name)}));
+    const find = names => normalized.find(item => names.includes(item.normalized))?.name || null;
+    return {serial: find(aliases.serial), ua: find(aliases.ua)};
+  }
+
+  function inferColumn(columnNames, data, predicate, excluded = null) {
+    let best = null;
+    let bestScore = 0;
+    columnNames.forEach(column => {
+      if (column === excluded) return;
+      const values = data.map(row => row?.[column]).filter(value => value !== null && value !== undefined && String(value).trim() !== '').slice(0, 120);
+      if (!values.length) return;
+      const matches = values.filter(predicate).length;
+      const score = matches / values.length;
+      if (score > bestScore) {
+        best = column;
+        bestScore = score;
+      }
+    });
+    return bestScore >= 0.55 ? best : null;
+  }
+
+  function resolveColumns(columnNames, data) {
+    const mapping = namedMapping(columnNames);
+    if (!mapping.serial) mapping.serial = inferColumn(columnNames, data, validSerial, mapping.ua);
+    if (!mapping.ua) mapping.ua = inferColumn(columnNames, data, validUA, mapping.serial);
+
+    // Segunda pasada por patrón para archivos Access con Campo1/Campo2 y captions genéricos.
+    if (!mapping.serial || !mapping.ua || mapping.serial === mapping.ua) {
+      const serial = inferColumn(columnNames, data, validSerial, null);
+      const ua = inferColumn(columnNames, data, validUA, serial);
+      if (serial && ua) return {serial, ua};
+    }
+    return mapping.serial && mapping.ua && mapping.serial !== mapping.ua ? mapping : null;
   }
 
   async function loadAccessReader() {
@@ -113,6 +184,7 @@
   }
 
   async function readAccdb(file) {
+    const context = validateContext();
     const {MDBReader, BufferClass} = await loadAccessReader();
     const bytes = await file.arrayBuffer();
     let reader;
@@ -125,7 +197,7 @@
     const tableNames = reader.getTableNames().filter(name => !/^MSys/i.test(String(name)));
     if (!tableNames.length) throw new Error('La base Access no contiene tablas de usuario legibles.');
 
-    const records = [];
+    const rawRecords = [];
     const compatibleTables = [];
     const skippedTables = [];
 
@@ -133,23 +205,19 @@
       try {
         const table = reader.getTable(tableName);
         const columns = table.getColumnNames();
-        const mapping = resolveColumns(columns);
+        const data = table.getData();
+        const mapping = resolveColumns(columns, data);
         if (!mapping) {
           skippedTables.push(tableName);
           continue;
         }
 
-        const data = table.getData();
         compatibleTables.push(tableName);
         data.forEach(row => {
-          records.push({
-            lot: normalizeText(cellValue(row, mapping.lot)),
-            serial: normalizeText(cellValue(row, mapping.serial)).replace(/\s+/g, '').toUpperCase(),
-            ua: normalizeUA(cellValue(row, mapping.ua)),
-            box: normalizeText(cellValue(row, mapping.box)),
-            proceso: normalizeText(cellValue(row, mapping.process)),
-            tabla_access: tableName
-          });
+          const serial = normalizeSerial(row?.[mapping.serial]);
+          const ua = normalizeUA(row?.[mapping.ua]);
+          if (!serial && !ua) return;
+          rawRecords.push({serial, ua, tabla_access: tableName});
         });
       } catch (error) {
         console.warn(`[ACCDB] No se pudo leer la tabla ${tableName}`, error);
@@ -158,23 +226,37 @@
     }
 
     if (!compatibleTables.length) {
-      throw new Error(
-        `No encontré una tabla con las columnas requeridas: LOTE, SERIAL/HOST SN, UA/UNIT ADDRESS y CAJA. Tablas revisadas: ${tableNames.join(', ')}.`
-      );
+      throw new Error(`No encontré una tabla con columnas de SERIAL y UA. Tablas revisadas: ${tableNames.join(', ')}.`);
     }
-    if (!records.length) {
+    if (!rawRecords.length) {
       throw new Error(`Las tablas compatibles (${compatibleTables.join(', ')}) no contienen registros.`);
     }
 
-    return {records, compatibleTables, skippedTables};
+    const counts = allocationCounts(context.lot);
+    const records = rawRecords.map(source => ({
+      lot: context.lot,
+      serial: source.serial,
+      ua: source.ua || UNKNOWN_UA,
+      box: assignBox(context, counts),
+      proceso: context.process,
+      tabla_access: source.tabla_access
+    }));
+
+    return {records, compatibleTables, skippedTables, context};
   }
 
   function replaceWithJson(input, sourceFile, parsed) {
     const base = sourceFile.name.replace(/\.accdb$/i, '');
     const payload = {
       origen: sourceFile.name,
-      formato: 'Microsoft Access ACCDB',
+      formato: 'Microsoft Access ACCDB · Serial + UA',
       tablas: parsed.compatibleTables,
+      contexto_integrado: {
+        proceso: parsed.context.process,
+        lote: parsed.context.lot,
+        caja_inicial: parsed.context.box,
+        cantidad_por_caja: parsed.context.quantity
+      },
       registros: parsed.records
     };
     const jsonFile = new File(
@@ -204,13 +286,14 @@
       importButton.disabled = true;
       importButton.textContent = 'Leyendo Access…';
     }
-    setMessage('warn', 'Leyendo archivo Access', `${file.name} · analizando tablas y columnas…`);
+    setMessage('warn', 'Leyendo archivo Access', `${file.name} · detectando SERIAL y UA…`);
 
     try {
       const parsed = await readAccdb(file);
+      const boxes = [...new Set(parsed.records.map(row => row.box))];
       showToast(
         'ACCDB leído',
-        `${parsed.records.length} filas encontradas en ${parsed.compatibleTables.length} tabla${parsed.compatibleTables.length === 1 ? '' : 's'} compatible${parsed.compatibleTables.length === 1 ? '' : 's'}.`,
+        `${parsed.records.length} equipos · Lote ${parsed.context.lot} · Caja${boxes.length === 1 ? '' : 's'} ${boxes.join(', ')}.`,
         'ok'
       );
       replaceWithJson(input, file, parsed);
@@ -239,7 +322,7 @@
     if (!String(input.accept || '').toLowerCase().includes('.accdb')) {
       input.accept = `${input.accept ? `${input.accept},` : ''}.accdb,application/msaccess,application/x-msaccess,application/vnd.ms-access`;
     }
-    if (button) button.title = 'Importar XLSX, XLS, CSV, TSV, TXT, JSON o Microsoft Access (.ACCDB)';
+    if (button) button.title = 'ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y Cantidad desde la pantalla.';
 
     if (input.dataset.accdbImportInstalled === '1') return;
     input.dataset.accdbImportInstalled = '1';
@@ -247,7 +330,8 @@
 
     window.EquipmentAccessImport = {
       readAccdb,
-      supportedExtension: '.accdb'
+      supportedExtension: '.accdb',
+      getContext: currentContext
     };
   }
 
