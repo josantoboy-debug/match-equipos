@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#090d14">
   <title>REGISTRO Y VERIFICACION</title>
+  <link rel="manifest" href="manifest.json?v=1.0.0">
+  <link rel="icon" href="icon.svg?v=1.0.0" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
   <link rel="stylesheet" href="file-index.css">
@@ -173,17 +175,17 @@
     </div>
     <div id="workspaceBody"></div>
   </section>
-  <p class="footnote">Los datos de cada operador se conservan localmente en este navegador. Exporta también tus respaldos antes de cambiar de equipo o limpiar los datos del navegador.</p>
+  <p class="footnote">Supabase es la fuente central. El navegador conserva caché y cambios pendientes para continuar trabajando temporalmente sin conexión.</p>
 </main>
 
 <footer class="app-footer" aria-label="Créditos de desarrollo">
   <div class="app-footer-inner">
     <div class="footer-authors">Desarrollado por <strong>Josue Parfait</strong> &amp; <strong>Marcos Rodríguez</strong></div>
-    <div class="footer-meta"><span>© 2026 — Todos los derechos reservados.</span><span aria-hidden="true">·</span><button type="button" class="credits-link" id="creditsBtn">Créditos</button></div>
+    <div class="footer-meta"><span>© 2026 — Todos los derechos reservados.</span><span aria-hidden="true">·</span><span>v1.0.0</span><span aria-hidden="true">·</span><button type="button" class="credits-link" id="creditsBtn">Créditos</button></div>
   </div>
 </footer>
 
-<div id="creditsModal" class="modal"><div class="modal-card small"><div class="modal-head"><h2>Co-creadores y desarrolladores</h2><button type="button" data-close="creditsModal" aria-label="Cerrar créditos">×</button></div><div class="modal-body"><div class="credits-people"><span>Josue Parfait</span><span>Marcos Rodríguez</span></div><p class="credits-joint">Proyecto desarrollado conjuntamente — 2026</p></div><div class="modal-foot"><button type="button" class="secondary" data-close="creditsModal">Cerrar</button></div></div></div>
+<div id="creditsModal" class="modal"><div class="modal-card small"><div class="modal-head"><h2>Co-creadores y desarrolladores</h2><button type="button" data-close="creditsModal" aria-label="Cerrar créditos">×</button></div><div class="modal-body"><div class="credits-people"><span>Josue Parfait</span><span>Marcos Rodríguez</span></div><p class="credits-joint">Proyecto desarrollado conjuntamente — 2026 · Versión 1.0.0</p></div><div class="modal-foot"><button type="button" class="secondary" data-close="creditsModal">Cerrar</button></div></div></div>
 
 <div id="editModal" class="modal"><div class="modal-card small"><div class="modal-head"><h2>Corregir registro</h2><button data-close="editModal">×</button></div><div class="modal-body edit-grid"><input id="editId" type="hidden"><label>Tipo<select id="editType"><option>Carcasa</option><option>Equipo</option></select></label><label>Host SN<input id="editHost" class="code"></label><label>UA<input id="editUA" class="code"></label></div><div class="modal-foot"><button class="secondary" data-close="editModal">Cancelar</button><button id="saveEdit" class="primary">Guardar corrección</button></div></div></div>
 
@@ -191,6 +193,10 @@
 
 <div id="toast" class="toast"></div>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4"></script>
+<script src="config.js?v=1.0.0"></script>
+<script src="production-core.js?v=1.0.0"></script>
+<script src="cloud-session.js?v=1.0.0"></script>
 <script src="app.js?v=b2b27e9"></script>
 <script src="search-mode.js"></script>
 <script src="file-index.js"></script>
@@ -202,14 +208,14 @@
 <script src="equipment-access-import.js?v=ua16-20260829"></script>
 <script src="equipment-auto-focus.js?v=ua16-20260829"></script>
 <script src="equipment-input-lock.js?v=ua16-20260829"></script>
-<script src="operator-session.js"></script>
-<script src="operator-lock.js"></script>
+<!-- Legacy local operator modules retained in repository but disabled in production. -->
 <script src="operator-counter-fix.js"></script>
 <script src="equipment-box-print.js?v=process2line-20260829"></script>
 <script src="registry-export.js?v=564220c"></script>
 <script src="audit-fixes.js?v=legacyload-20260829b"></script>
 <script src="unified-export.js?v=870f693"></script>
 <script src="export-summary.js?v=1a4c24c"></script>
+<script src="app-integration.js?v=1.0.0"></script>
 <script src="voice-notifications.js?v=welcome-20260829"></script>
 <script>
   (()=>{
