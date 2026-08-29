@@ -48,6 +48,7 @@
     return source.map((row, index) => ({
       N: index + 1,
       LOTE: row.lot ?? '',
+      'ASIGNACIÓN / PROCESO': row.process ?? '',
       SERIAL: row.serial ?? '',
       'UA / UNIT ADDRESS': row.ua ?? '',
       CAJA: row.box ?? '',
@@ -90,10 +91,10 @@
 
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [
-      {wch: 7}, {wch: 20}, {wch: 18}, {wch: 24}, {wch: 16},
-      {wch: 12}, {wch: 24}, {wch: 30}, {wch: 24}
+      {wch: 7}, {wch: 20}, {wch: 30}, {wch: 18}, {wch: 24},
+      {wch: 16}, {wch: 12}, {wch: 24}, {wch: 30}, {wch: 24}
     ];
-    ws['!autofilter'] = {ref: ws['!ref'] || 'A1:I1'};
+    ws['!autofilter'] = {ref: ws['!ref'] || 'A1:J1'};
 
     Object.keys(ws).forEach(address => {
       if (address.startsWith('!')) return;
