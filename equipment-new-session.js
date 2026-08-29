@@ -24,15 +24,11 @@
 
     const quantity = $('#equipmentQuantity');
     if (quantity) {
-      quantity.value = String(MAX_PER_BOX);
-      quantity.setAttribute('value', String(MAX_PER_BOX));
-      quantity.classList.remove('field-invalid');
+      quantity.value = '';
+      quantity.removeAttribute('value');
+      quantity.classList.remove('field-valid', 'field-invalid');
     }
-    const quantityDisplay = $('#equipmentQuantityDisplay');
-    if (quantityDisplay) {
-      quantityDisplay.value = '0';
-      quantityDisplay.classList.remove('field-valid', 'field-invalid');
-    }
+    $('#equipmentQuantityDisplay')?.remove();
 
     window.EquipmentProcess?.clear?.();
     window.EquipmentRegistry?.setCaptureMode?.('manual');
@@ -42,7 +38,7 @@
       equipmentTotalCount: '0',
       equipmentLotCount: '0',
       equipmentBoxCount: '0',
-      equipmentCurrentBoxCount: `0 / ${MAX_PER_BOX}`
+      equipmentCurrentBoxCount: '0 / —'
     };
     Object.entries(summaryValues).forEach(([id, value]) => {
       const el = document.getElementById(id);
@@ -54,7 +50,7 @@
     const message = $('#equipmentValidationMessage');
     if (message) {
       message.className = 'equipment-validation neutral';
-      message.innerHTML = `<span class="equipment-validation-icon">✓</span><div><strong>Nueva sesión lista</strong><small>Define Asignación / Proceso, Lote y Caja. La cantidad se calcula automáticamente con un máximo de ${MAX_PER_BOX} equipos por caja.</small></div>`;
+      message.innerHTML = `<span class="equipment-validation-icon">✓</span><div><strong>Nueva sesión lista</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD asignada. La cantidad puede ser de 1 a ${MAX_PER_BOX} equipos.</small></div>`;
     }
 
     setTimeout(() => {
@@ -80,8 +76,8 @@
   function startNewSession() {
     const rows = window.EquipmentRegistry?.getRows?.() || [];
     const message = rows.length
-      ? `Se eliminarán ${rows.length} equipos del registro por caja actual.\n\nTambién se limpiará la Asignación / Proceso actual.\n\nEl Registro operativo y los Matches NO se borrarán.\n\n¿Crear una nueva sesión?`
-      : 'Se limpiarán Asignación / Proceso, Lote, Caja, Serial y UA del registrador por caja.\n\nLa cantidad automática seguirá con máximo 64 equipos por caja.\n\n¿Crear una nueva sesión?';
+      ? `Se eliminarán ${rows.length} equipos del registro por caja actual.\n\nTambién se limpiará la Asignación / Proceso actual y la CANTIDAD asignada.\n\nEl Registro operativo y los Matches NO se borrarán.\n\n¿Crear una nueva sesión?`
+      : `Se limpiarán Asignación / Proceso, Lote, Caja, Cantidad, Serial y UA del registrador por caja.\n\nLa nueva CANTIDAD deberá estar entre 1 y ${MAX_PER_BOX}.\n\n¿Crear una nueva sesión?`;
 
     if (!window.confirm(message)) return;
 
