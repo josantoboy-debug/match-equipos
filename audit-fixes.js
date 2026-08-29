@@ -3,8 +3,6 @@
 
   const $ = selector => document.querySelector(selector);
 
-  // Los indicadores se siguen calculando internamente, pero no ocupan espacio
-  // en la interfaz. Sus valores se usan en los archivos exportados.
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
     style.id = 'hiddenKpiStyle';
@@ -61,7 +59,7 @@
       return;
     }
     const script = document.createElement('script');
-    script.src = 'equipment-new-session.js?v=f461ddb';
+    script.src = 'equipment-new-session.js?v=709a1fc';
     script.dataset.equipmentNewSession = '1';
     script.async = false;
     script.onload = () => window.EquipmentNewSession?.install?.();
