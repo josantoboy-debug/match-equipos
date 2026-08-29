@@ -1,27 +1,15 @@
 (() => {
   'use strict';
 
-  const STORAGE_PREFIX = 'matchEquipos.ttsPreference.v1';
+  const STORAGE_PREFIX = 'matchEquipos.ttsPreference.v2';
   const OPERATOR_STORE_KEY = 'matchEquipos.operatorAccess.v1';
   const DEFAULTS = Object.freeze({welcome:false, alerts:true});
+  const $ = selector => document.querySelector(selector);
 
   let currentOperator = null;
   let preference = {...DEFAULTS};
-  let unlocked = false;
-  let pendingWelcome = '';
-  let lastSpoken = '';
-  let lastSpokenAt = 0;
-  let toastObserver = null;
-  let resultObserver = null;
-  let validationObserver = null;
-
-  const $ = selector => document.querySelector(selector);
-  const normalizeText = value => String(value ?? '').replace(/\s+/g, ' ').trim();
-  const normalizeName = value => String(value ?? '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase();
+  let nativeSpeak = null;
+  let speakWrapped = false;
 
   function safeJSON(value, fallback = null) {
     try { return JSON.parse(value); } catch { return fallback; }
@@ -41,12 +29,12 @@
     };
   }
 
-  function key(operator = currentOperator) {
+  function storageKey(operator = currentOperator) {
     return `${STORAGE_PREFIX}.${operator?.id || 'guest'}`;
   }
 
   function readPreference(operator) {
-    const saved = safeJSON(localStorage.getItem(key(operator)), null);
+    const saved = safeJSON(localStorage.getItem(storageKey(operator)), null);
     return {
       welcome: typeof saved?.welcome === 'boolean' ? saved.welcome : DEFAULTS.welcome,
       alerts: typeof saved?.alerts === 'boolean' ? saved.alerts : DEFAULTS.alerts
@@ -55,99 +43,60 @@
 
   function savePreference(next) {
     preference = {...preference, ...next};
-    try { localStorage.setItem(key(), JSON.stringify(preference)); } catch {}
+    try { localStorage.setItem(storageKey(), JSON.stringify(preference)); } catch {}
     syncControls();
+    if (!preference.alerts) {
+      try { window.speechSynthesis?.cancel?.(); } catch {}
+    }
   }
 
-  function speechAvailable() {
-    return 'speechSynthesis' in window && typeof window.SpeechSynthesisUtterance === 'function';
+  function isWelcome(text) {
+    return /^\s*bienvenid[ao]\b/i.test(String(text || ''));
   }
 
-  function spanishVoice() {
-    if (!speechAvailable()) return null;
-    const voices = window.speechSynthesis.getVoices?.() || [];
-    return voices.find(v => /^es-PA$/i.test(v.lang))
-      || voices.find(v => /^es-(MX|US)$/i.test(v.lang))
-      || voices.find(v => /^es/i.test(v.lang))
-      || null;
+  function completeSuppressedUtterance(utterance) {
+    setTimeout(() => {
+      try {
+        if (typeof utterance?.onend === 'function') utterance.onend(new Event('end'));
+      } catch {}
+    }, 0);
   }
 
-  function speak(text, {force=false, interrupt=true} = {}) {
-    const message = normalizeText(text);
-    if (!message || !speechAvailable()) return false;
-    if (!force && !preference.alerts) return false;
-    if (!unlocked) return false;
+  function installSpeechPolicy() {
+    const synth = window.speechSynthesis;
+    if (!synth || speakWrapped || typeof synth.speak !== 'function') return false;
 
-    const now = Date.now();
-    if (message === lastSpoken && now - lastSpokenAt < 1200) return false;
-    lastSpoken = message;
-    lastSpokenAt = now;
+    nativeSpeak = synth.speak.bind(synth);
+    const wrappedSpeak = utterance => {
+      const text = String(utterance?.text || '');
+      const allowed = isWelcome(text) ? preference.welcome : preference.alerts;
+      if (!allowed) {
+        completeSuppressedUtterance(utterance);
+        return;
+      }
+      return nativeSpeak(utterance);
+    };
 
     try {
-      if (interrupt) window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(message.slice(0, 260));
-      utterance.lang = 'es-PA';
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      const voice = spanishVoice();
-      if (voice) utterance.voice = voice;
-      window.speechSynthesis.speak(utterance);
-      return true;
+      synth.speak = wrappedSpeak;
+      if (synth.speak !== wrappedSpeak) {
+        Object.defineProperty(synth, 'speak', {configurable:true, writable:true, value:wrappedSpeak});
+      }
+      speakWrapped = synth.speak === wrappedSpeak;
     } catch (error) {
-      console.warn('[tts] No se pudo reproducir la alerta', error);
-      return false;
+      console.warn('[tts-policy] No se pudo separar bienvenida y alertas', error);
+      speakWrapped = false;
     }
+    return speakWrapped;
   }
 
-  function unlockSpeech() {
-    unlocked = true;
-    if (pendingWelcome && preference.welcome) {
-      const text = pendingWelcome;
-      pendingWelcome = '';
-      speak(text, {force:true, interrupt:false});
-    }
-  }
-
-  function conciseAlert(element) {
-    if (!element) return '';
-    const strong = normalizeText(element.querySelector?.('strong,h3')?.textContent);
-    const detail = normalizeText(element.querySelector?.('span,small,p')?.textContent);
-    const combined = normalizeText(`${strong}. ${detail}`);
-    return combined || normalizeText(element.textContent);
-  }
-
-  function shouldSpeakPanel(element) {
-    const cls = String(element?.className || '');
-    const text = normalizeText(element?.textContent);
-    return /\b(error|warn|ok)\b/i.test(cls)
-      || /(duplicado|inv[aá]lido|bloqueado|complet|impresi[oó]n|encontrad|match|falt|cargad|recuperad|registrad|no se pudo|error)/i.test(text);
-  }
-
-  function speakElement(element) {
-    if (!preference.alerts || !unlocked || !shouldSpeakPanel(element)) return;
-    const text = conciseAlert(element);
-    if (text) speak(text);
-  }
-
-  function observeElement(selector, kind) {
-    const element = $(selector);
-    if (!element) return null;
-    const observer = new MutationObserver(() => {
-      if (kind === 'toast' && !element.classList.contains('show')) return;
-      speakElement(element);
-    });
-    observer.observe(element, {childList:true, subtree:true, characterData:true, attributes:true, attributeFilter:['class']});
-    return observer;
-  }
-
-  function installObservers() {
-    toastObserver?.disconnect();
-    resultObserver?.disconnect();
-    validationObserver?.disconnect();
-    toastObserver = observeElement('#toast', 'toast');
-    resultObserver = observeElement('#resultPanel', 'result');
-    validationObserver = observeElement('#equipmentValidationMessage', 'validation');
+  function ensureCoreAlertsEnabled() {
+    const core = window.MatchVoiceTTS;
+    if (!core?.setEnabled) return false;
+    try {
+      core.setEnabled(true, {announceState:false});
+      return true;
+    } catch { return false; }
   }
 
   function setOperator(operator) {
@@ -155,15 +104,14 @@
     if (next?.id === currentOperator?.id && next?.name === currentOperator?.name) return;
     currentOperator = next;
     preference = readPreference(currentOperator);
-    pendingWelcome = '';
     syncControls();
   }
 
   function bindOperatorSelect() {
     const select = $('#operatorSelect');
     if (!select) return false;
-    if (select.dataset.ttsBound !== '1') {
-      select.dataset.ttsBound = '1';
+    if (select.dataset.ttsPolicyBound !== '1') {
+      select.dataset.ttsPolicyBound = '1';
       select.addEventListener('change', () => setOperator(selectedOperator()));
     }
     if (!currentOperator) setOperator(selectedOperator());
@@ -180,7 +128,17 @@
       if (state) state.textContent = active ? 'ON' : 'OFF';
     });
     const support = $('#operatorVoiceSupport');
-    if (support) support.textContent = speechAvailable() ? 'Voz del navegador' : 'TTS no disponible';
+    if (support) support.textContent = 'speechSynthesis' in window ? 'Voz del navegador' : 'TTS no disponible';
+  }
+
+  function announceAlertsEnabled() {
+    if (!preference.alerts) return;
+    ensureCoreAlertsEnabled();
+    setTimeout(() => {
+      window.MatchVoiceTTS?.announce?.('Alertas de voz activadas.', {
+        priority:'high', interrupt:true, dedupeMs:0, key:`tts-alerts-on-${Date.now()}`
+      });
+    }, 0);
   }
 
   function installLoginControls() {
@@ -206,10 +164,10 @@
       section.addEventListener('click', event => {
         const button = event.target.closest('[data-tts-setting]');
         if (!button) return;
-        unlockSpeech();
         const setting = button.dataset.ttsSetting;
-        savePreference({[setting]: !preference[setting]});
-        if (setting === 'alerts' && preference.alerts) speak('Alertas de voz activadas.', {force:true});
+        const next = !preference[setting];
+        savePreference({[setting]:next});
+        if (setting === 'alerts' && next) announceAlertsEnabled();
       });
     }
 
@@ -223,44 +181,46 @@
     const observer = new MutationObserver(() => {
       installLoginControls();
       bindOperatorSelect();
+      installSpeechPolicy();
+      ensureCoreAlertsEnabled();
     });
     observer.observe(document.documentElement, {childList:true, subtree:true});
   }
 
-  document.addEventListener('pointerdown', unlockSpeech, {capture:true, passive:true});
-  document.addEventListener('keydown', unlockSpeech, {capture:true});
-
   document.addEventListener('operator:login', event => {
     const detail = event.detail || {};
     setOperator({id:detail.id, name:detail.name});
-    if (preference.welcome) {
-      const first = normalizeName(detail.name).split(/\s+/)[0] || 'operador';
-      const text = `Bienvenido ${first}. Registro y verificación listo.`;
-      if (!speak(text, {force:true, interrupt:false})) pendingWelcome = text;
-    }
-    setTimeout(installObservers, 0);
+    installSpeechPolicy();
+    ensureCoreAlertsEnabled();
   });
 
-  window.speechSynthesis?.addEventListener?.('voiceschanged', syncControls);
-
   preference = readPreference(null);
+  installSpeechPolicy();
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
       watchLogin();
-      installObservers();
+      setTimeout(() => {
+        installSpeechPolicy();
+        ensureCoreAlertsEnabled();
+      }, 0);
     });
   } else {
     watchLogin();
-    installObservers();
+    setTimeout(() => {
+      installSpeechPolicy();
+      ensureCoreAlertsEnabled();
+    }, 0);
   }
 
   window.AppTTS = {
     getPreference: () => ({...preference}),
     setWelcome: enabled => savePreference({welcome:!!enabled}),
-    setAlerts: enabled => savePreference({alerts:!!enabled}),
-    notify: text => speak(text),
-    speak: text => speak(text, {force:true}),
-    isAvailable: speechAvailable,
-    setOperator
+    setAlerts: enabled => {
+      savePreference({alerts:!!enabled});
+      if (enabled) announceAlertsEnabled();
+    },
+    setOperator,
+    policyInstalled: () => speakWrapped
   };
 })();
