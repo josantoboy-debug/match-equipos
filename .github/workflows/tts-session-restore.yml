@@ -84,11 +84,11 @@ jobs:
               Object.defineProperty(window,'speechSynthesis',{configurable:true,get:()=>mockSpeech});
             });
             const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
-            await page.goto('http://127.0.0.1:4173/?restore-welcome=1',{waitUntil:'domcontentloaded',timeout:15000});
+            await page.goto('http://127.0.0.1:4173/?restore-welcome=2',{waitUntil:'domcontentloaded',timeout:15000});
             await page.evaluate(()=>{ window.__spoken=[]; document.dispatchEvent(new CustomEvent('operator:login',{detail:{id:'restored',name:'Josue Parfait'}})); });
-            let before=await page.evaluate(()=>window.__spoken.slice());
+            const before=await page.evaluate(()=>window.__spoken.slice());
             assert.strictEqual(before.length,0,'Welcome should wait until a trusted interaction');
-            await page.click('#operatorNewBtn');
+            await page.keyboard.press('Tab');
             await page.waitForFunction(()=>window.__spoken.some(t=>t.includes('Bienvenida Josue Parfait')),{timeout:3000});
             const state=await page.evaluate(()=>({spoken:window.__spoken, unlocked:window.MatchVoiceTTS?.isUnlocked?.()}));
             assert.strictEqual(state.unlocked,true);
