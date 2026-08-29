@@ -55,6 +55,27 @@
     return true;
   }
 
+  function quantityValid() {
+    if (window.EquipmentCapacity?.validateQuantity) {
+      return window.EquipmentCapacity.validateQuantity({focus:true, announce:true});
+    }
+    const input = $('#equipmentQuantity');
+    const value = Number(String(input?.value || '').trim());
+    const valid = Number.isInteger(value) && value >= 1 && value <= MAX_PER_BOX;
+    input?.classList.toggle('field-valid', valid);
+    input?.classList.toggle('field-invalid', !valid && !!String(input?.value || '').trim());
+    if (!valid) {
+      setMessage('error', 'CANTIDAD inválida', `Asigna entre 1 y ${MAX_PER_BOX} equipos para esta caja.`);
+      input?.focus();
+      input?.select?.();
+    }
+    return valid;
+  }
+
+  function assignedQuantity() {
+    return window.EquipmentCapacity?.getAssignedQuantity?.() || Number($('#equipmentQuantity')?.value || 0) || 0;
+  }
+
   function serialValid() {
     const input = $('#equipmentSerial');
     const value = String(input?.value || '').trim().replace(/\s+/g, '').toUpperCase();
@@ -86,10 +107,11 @@
   function wireFlow() {
     const lot = $('#equipmentLot');
     const box = $('#equipmentBox');
+    const quantity = $('#equipmentQuantity');
     const serial = $('#equipmentSerial');
     const ua = $('#equipmentUA');
     const add = $('#equipmentAddBtn');
-    if (!lot || !box || !serial || !ua || !add) return;
+    if (!lot || !box || !quantity || !serial || !ua || !add) return;
 
     lot.placeholder = 'LOTE001';
     lot.setAttribute('inputmode', 'text');
@@ -106,7 +128,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!lotValid()) return;
-      setMessage('ok', 'LOTE confirmado', 'Continúa con CAJA. La cantidad se calculará automáticamente.');
+      setMessage('ok', 'LOTE confirmado', 'Continúa con CAJA.');
       focusField('#equipmentBox');
     }, true);
 
@@ -115,8 +137,23 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!lotValid() || !boxValid()) return;
+      setMessage('ok', 'CAJA confirmada', `Ahora asigna la CANTIDAD de equipos de esta caja, entre 1 y ${MAX_PER_BOX}.`);
+      focusField('#equipmentQuantity');
+    }, true);
+
+    quantity.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!lotValid() || !boxValid() || !quantityValid()) return;
+      const cap = assignedQuantity();
       const count = currentBoxCount();
-      setMessage('ok', 'CAJA confirmada', `Cantidad automática: ${count}/${MAX_PER_BOX}. Continúa con SERIAL.`);
+      if (count >= cap) {
+        setMessage('warn', 'Cantidad ya completada', `Caja ${box.value}: ${count}/${cap}. Usa la siguiente caja para continuar.`);
+        focusField('#equipmentBox');
+        return;
+      }
+      setMessage('ok', 'CANTIDAD confirmada', `Caja ${box.value}: ${count}/${cap}. Continúa con SERIAL.`);
       focusField('#equipmentSerial');
     }, true);
 
@@ -127,7 +164,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      if (!lotValid() || !boxValid()) return;
+      if (!lotValid() || !boxValid() || !quantityValid()) return;
       if (!serialValid()) {
         setMessage('error', 'SERIAL no confirmado', 'El SERIAL debe iniciar con M y tener exactamente 12 caracteres alfanuméricos.');
         focusField('#equipmentSerial');
@@ -139,12 +176,14 @@
         return;
       }
 
-      setMessage('ok', 'SERIAL y UA confirmados', `La cantidad se calculará automáticamente, con máximo ${MAX_PER_BOX} equipos por caja. Pulsa Agregar equipo.`);
+      const cap = assignedQuantity();
+      const count = currentBoxCount();
+      setMessage('ok', 'SERIAL y UA confirmados', `Caja ${box.value}: ${count}/${cap}. Pulsa Agregar equipo.`);
       add.focus({preventScroll: true});
     }, true);
 
     add.addEventListener('click', event => {
-      if (!lotValid() || !boxValid()) {
+      if (!lotValid() || !boxValid() || !quantityValid()) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
