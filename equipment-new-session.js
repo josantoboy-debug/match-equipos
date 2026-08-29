@@ -14,13 +14,14 @@
   }
 
   function resetFields() {
-    ['#equipmentLot', '#equipmentBox', '#equipmentQuantity', '#equipmentSerial', '#equipmentUA'].forEach(selector => {
+    ['#equipmentProcess', '#equipmentLot', '#equipmentBox', '#equipmentQuantity', '#equipmentSerial', '#equipmentUA'].forEach(selector => {
       const input = $(selector);
       if (!input) return;
       input.value = '';
       input.classList.remove('field-valid', 'field-invalid');
     });
 
+    window.EquipmentProcess?.clear?.();
     window.EquipmentRegistry?.setCaptureMode?.('manual');
 
     const summaryValues = {
@@ -39,10 +40,10 @@
     const message = $('#equipmentValidationMessage');
     if (message) {
       message.className = 'equipment-validation neutral';
-      message.innerHTML = '<span class="equipment-validation-icon">✓</span><div><strong>Nueva sesión lista</strong><small>Define Lote, Caja y Cantidad para comenzar un nuevo registro.</small></div>';
+      message.innerHTML = '<span class="equipment-validation-icon">✓</span><div><strong>Nueva sesión lista</strong><small>Define Asignación / Proceso, Lote, Caja y Cantidad para comenzar un nuevo registro.</small></div>';
     }
 
-    setTimeout(() => $('#equipmentLot')?.focus(), 0);
+    setTimeout(() => $('#equipmentProcess')?.focus() || $('#equipmentLot')?.focus(), 0);
   }
 
   function clearRegistryRows() {
@@ -61,8 +62,8 @@
   function startNewSession() {
     const rows = window.EquipmentRegistry?.getRows?.() || [];
     const message = rows.length
-      ? `Se eliminarán ${rows.length} equipos del registro por caja actual.\n\nEl Registro operativo y los Matches NO se borrarán.\n\n¿Crear una nueva sesión?`
-      : 'Se limpiarán Lote, Caja, Cantidad, Serial y UA del registrador por caja.\n\n¿Crear una nueva sesión?';
+      ? `Se eliminarán ${rows.length} equipos del registro por caja actual.\n\nTambién se limpiará la Asignación / Proceso actual.\n\nEl Registro operativo y los Matches NO se borrarán.\n\n¿Crear una nueva sesión?`
+      : 'Se limpiarán Asignación / Proceso, Lote, Caja, Cantidad, Serial y UA del registrador por caja.\n\n¿Crear una nueva sesión?';
 
     if (!window.confirm(message)) return;
 
