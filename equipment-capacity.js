@@ -1,29 +1,12 @@
 (() => {
   'use strict';
 
+  const MAX_PER_BOX = 64;
   const $ = (selector, root = document) => root.querySelector(selector);
   const norm = value => String(value ?? '').trim();
   const upper = value => norm(value).toUpperCase();
   let lastRowCount = 0;
   let observerBusy = false;
-
-  function validateQuantity(value) {
-    const text = norm(value);
-    if (!text) return {valid:false, value:0, message:'La CANTIDAD de equipos por caja es obligatoria.'};
-    if (!/^\d+$/.test(text)) return {valid:false, value:0, message:'La CANTIDAD debe ser un número entero positivo.'};
-    const number = Number(text);
-    if (!Number.isSafeInteger(number) || number < 1) return {valid:false, value:0, message:'La CANTIDAD debe ser mayor o igual a 1.'};
-    if (number > 100000) return {valid:false, value:0, message:'La CANTIDAD es demasiado alta. Usa un valor menor o igual a 100000.'};
-    return {valid:true, value:number, message:''};
-  }
-
-  function quantityFieldState(result) {
-    const input = $('#equipmentQuantity');
-    if (!input) return;
-    input.classList.remove('field-valid', 'field-invalid');
-    if (!input.value.trim()) return;
-    input.classList.add(result.valid ? 'field-valid' : 'field-invalid');
-  }
 
   function message(tone, title, detail) {
     const panel = $('#equipmentValidationMessage');
@@ -43,7 +26,8 @@
   }
 
   function getRows() {
-    return window.EquipmentRegistry?.getRows?.() || [];
+    const rows = window.EquipmentRegistry?.getRows?.();
+    return Array.isArray(rows) ? rows : [];
   }
 
   function rowsInBox(lot, box) {
@@ -59,16 +43,15 @@
     if (match) {
       const prefix = match[1];
       const digits = match[2];
-      const next = String(Number(digits) + 1).padStart(digits.length, '0');
-      return `${prefix}${next}`;
+      return `${prefix}${String(Number(digits) + 1).padStart(digits.length, '0')}`;
     }
     return `${original}-2`;
   }
 
-  function nextAvailableBox(lot, currentBox, quantity) {
+  function nextAvailableBox(lot, currentBox) {
     let candidate = norm(currentBox);
     let loops = 0;
-    while (rowsInBox(lot, candidate).length >= quantity && loops < 10000) {
+    while (rowsInBox(lot, candidate).length >= MAX_PER_BOX && loops < 10000) {
       candidate = incrementBoxName(candidate);
       loops++;
     }
@@ -84,56 +67,92 @@
     box.dispatchEvent(new Event('input', {bubbles:true}));
   }
 
-  function ensureCapacityBeforeRegister() {
-    const quantityResult = validateQuantity($('#equipmentQuantity')?.value);
-    quantityFieldState(quantityResult);
-    if (!quantityResult.valid) {
-      message('error', 'CANTIDAD no confirmada', quantityResult.message);
-      $('#equipmentQuantity')?.focus();
-      $('#equipmentQuantity')?.select?.();
-      return false;
-    }
+  function forceInternalCapacity() {
+    const input = $('#equipmentQuantity');
+    if (!input) return;
+    input.value = String(MAX_PER_BOX);
+    input.setAttribute('value', String(MAX_PER_BOX));
+  }
 
+  function installAutomaticQuantityField() {
+    const internal = $('#equipmentQuantity');
+    const field = internal?.closest('label');
+    if (!internal || !field) return;
+
+    forceInternalCapacity();
+    internal.type = 'hidden';
+    internal.tabIndex = -1;
+    internal.setAttribute('aria-hidden', 'true');
+
+    const title = field.querySelector('span');
+    if (title) title.innerHTML = 'CANTIDAD <small>Automática · máximo 64</small>';
+
+    if (!$('#equipmentQuantityDisplay')) {
+      const display = document.createElement('input');
+      display.id = 'equipmentQuantityDisplay';
+      display.className = 'equipment-code';
+      display.type = 'text';
+      display.readOnly = true;
+      display.value = '0';
+      display.setAttribute('aria-label', 'Cantidad automática de equipos en la caja actual');
+      display.title = 'Se calcula automáticamente según los equipos registrados. Máximo 64.';
+      field.appendChild(display);
+    }
+  }
+
+  function currentCount() {
+    const lot = norm($('#equipmentLot')?.value);
+    const box = norm($('#equipmentBox')?.value);
+    if (!lot || !box) return 0;
+    return rowsInBox(lot, box).length;
+  }
+
+  function updateQuantityDisplay() {
+    forceInternalCapacity();
+    const display = $('#equipmentQuantityDisplay');
+    if (!display) return;
+    const count = Math.min(MAX_PER_BOX, currentCount());
+    display.value = String(count);
+    display.classList.remove('field-invalid');
+    display.classList.toggle('field-valid', count > 0);
+    display.title = `${count} de ${MAX_PER_BOX} equipos en la caja actual`;
+  }
+
+  function ensureCapacityBeforeRegister() {
+    forceInternalCapacity();
     const lot = norm($('#equipmentLot')?.value);
     const box = norm($('#equipmentBox')?.value);
     if (!lot || !box) return true;
 
     const count = rowsInBox(lot, box).length;
-    if (count >= quantityResult.value) {
-      const next = nextAvailableBox(lot, box, quantityResult.value);
+    if (count >= MAX_PER_BOX) {
+      const next = nextAvailableBox(lot, box);
       setBox(next);
-      message(
-        'ok',
-        `Caja ${box} completa`,
-        `Alcanzó ${count}/${quantityResult.value} equipos. Se seleccionó automáticamente la Caja ${next}.`
-      );
+      message('ok', `Caja ${box} completa`, `${MAX_PER_BOX}/${MAX_PER_BOX} equipos. Se preparó automáticamente la Caja ${next}.`);
     }
+    updateQuantityDisplay();
     return true;
   }
 
   function updateCapacityIndicator() {
+    forceInternalCapacity();
     const strong = $('#equipmentCurrentBoxCount');
     const label = $('#equipmentCurrentBoxLabel');
-    const quantityResult = validateQuantity($('#equipmentQuantity')?.value);
     if (!strong || !label) return;
 
     const lot = norm($('#equipmentLot')?.value);
     const box = norm($('#equipmentBox')?.value);
     if (!lot || !box) {
-      if (quantityResult.valid) strong.textContent = `0 / ${quantityResult.value}`;
+      strong.textContent = `0 / ${MAX_PER_BOX}`;
+      updateQuantityDisplay();
       return;
     }
 
     const count = rowsInBox(lot, box).length;
-    if (!quantityResult.valid) {
-      strong.textContent = String(count);
-      label.textContent = `${lot} · ${box} · define cantidad`;
-      return;
-    }
-
-    const remaining = Math.max(0, quantityResult.value - count);
-    strong.textContent = `${count} / ${quantityResult.value}`;
+    const remaining = Math.max(0, MAX_PER_BOX - count);
+    strong.textContent = `${count} / ${MAX_PER_BOX}`;
     label.textContent = `${lot} · ${box} · ${remaining ? `faltan ${remaining}` : 'CAJA COMPLETA'}`;
+    updateQuantityDisplay();
   }
 
   function afterRegistryChanged() {
@@ -141,33 +160,25 @@
     observerBusy = true;
     requestAnimationFrame(() => {
       try {
+        forceInternalCapacity();
         const rows = getRows();
         const previousCount = lastRowCount;
         lastRowCount = rows.length;
 
         if (rows.length > previousCount) {
           const newest = rows[rows.length - 1];
-          const quantityResult = validateQuantity($('#equipmentQuantity')?.value);
-          if (newest && quantityResult.valid && /^Captura /i.test(String(newest.origin || ''))) {
+          if (newest && /^Captura /i.test(String(newest.origin || ''))) {
             const boxCount = rowsInBox(newest.lot, newest.box).length;
             const currentLot = upper($('#equipmentLot')?.value);
             const currentBox = upper($('#equipmentBox')?.value);
 
-            if (boxCount >= quantityResult.value && currentLot === upper(newest.lot) && currentBox === upper(newest.box)) {
-              const next = nextAvailableBox(newest.lot, newest.box, quantityResult.value);
+            if (boxCount >= MAX_PER_BOX && currentLot === upper(newest.lot) && currentBox === upper(newest.box)) {
+              const next = nextAvailableBox(newest.lot, newest.box);
               setBox(next);
-              message(
-                'ok',
-                `Caja ${newest.box} completada`,
-                `${boxCount}/${quantityResult.value} equipos registrados. Nueva Caja ${next} preparada automáticamente para el siguiente equipo.`
-              );
+              message('ok', `Caja ${newest.box} completada`, `${MAX_PER_BOX} equipos registrados. Nueva Caja ${next} preparada automáticamente.`);
             } else if (currentLot === upper(newest.lot) && currentBox === upper(newest.box)) {
-              const remaining = Math.max(0, quantityResult.value - boxCount);
-              message(
-                'ok',
-                `Equipo ${boxCount} de ${quantityResult.value} registrado`,
-                `La Caja ${newest.box} se mantiene. Faltan ${remaining} equipo${remaining === 1 ? '' : 's'} para crear la siguiente caja.`
-              );
+              const remaining = Math.max(0, MAX_PER_BOX - boxCount);
+              message('ok', `Equipo ${boxCount} registrado`, `Caja ${newest.box}: ${boxCount}/${MAX_PER_BOX}. Faltan ${remaining} equipo${remaining === 1 ? '' : 's'}.`);
             }
           }
         }
@@ -178,97 +189,33 @@
     });
   }
 
-  function blockEventForQuantity(event) {
-    const result = validateQuantity($('#equipmentQuantity')?.value);
-    quantityFieldState(result);
-    if (result.valid) return false;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    message('error', 'CANTIDAD no confirmada', result.message);
-    $('#equipmentQuantity')?.focus();
-    $('#equipmentQuantity')?.select?.();
-    return true;
-  }
-
   function wireCapacityFlow() {
-    const quantity = $('#equipmentQuantity');
     const box = $('#equipmentBox');
-    const ua = $('#equipmentUA');
     const add = $('#equipmentAddBtn');
-    if (!quantity || !box || !ua || !add) return;
+    if (!box || !add) return;
 
-    quantity.addEventListener('input', () => {
-      const result = validateQuantity(quantity.value);
-      quantityFieldState(result);
-      updateCapacityIndicator();
-    });
-
-    quantity.addEventListener('keydown', event => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-      const result = validateQuantity(quantity.value);
-      quantityFieldState(result);
-      if (!result.valid) {
-        message('error', 'CANTIDAD inválida', result.message);
-        quantity.focus();
-        quantity.select?.();
-        return;
-      }
-      quantity.value = String(result.value);
-      ensureCapacityBeforeRegister();
-
-      const mode = window.EquipmentRegistry?.getCaptureMode?.() || 'manual';
-      const serialOk = /^M[A-Z0-9]{11}$/.test(String($('#equipmentSerial')?.value || '').trim().toUpperCase());
-      const uaNorm = String($('#equipmentUA')?.value || '').replace(/[-\s]/g, '');
-      const uaOk = /^0000\d{12}$/.test(uaNorm);
-      const lotOk = !!norm($('#equipmentLot')?.value);
-      const boxOk = !!norm($('#equipmentBox')?.value);
-
-      if (mode === 'automatic' && serialOk && uaOk && lotOk && boxOk) {
-        add.click();
-      } else if (serialOk && uaOk && lotOk && boxOk) {
-        message('ok', 'CANTIDAD confirmada', `Capacidad fijada en ${result.value} equipos por caja. Pulsa Agregar equipo para guardar.`);
-        add.focus();
-      } else {
-        message('ok', 'CANTIDAD confirmada', `Capacidad fijada en ${result.value} equipos por caja. Continúa con los datos pendientes.`);
-        $('#equipmentSerial')?.focus();
-      }
-      updateCapacityIndicator();
-    });
-
-    // En la primera configuración, CAJA → ENTER conduce a CANTIDAD antes de permitir un registro.
-    box.addEventListener('keydown', event => {
-      if (event.key !== 'Enter') return;
-      const result = validateQuantity(quantity.value);
-      if (result.valid) return;
-      if (!norm(box.value)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      box.classList.remove('field-invalid');
-      box.classList.add('field-valid');
-      message('warn', 'Define la capacidad de la caja', 'Ingresa CANTIDAD y presiona ENTER. La aplicación no registrará equipos sin este valor.');
-      quantity.focus();
-      quantity.select?.();
-    }, true);
-
-    // En automático, UA + ENTER solo registra si la capacidad ya fue confirmada.
-    ua.addEventListener('keydown', event => {
-      if (event.key !== 'Enter') return;
-      const mode = window.EquipmentRegistry?.getCaptureMode?.() || 'manual';
-      if (mode !== 'automatic') return;
-      if (!norm(box.value)) return; // Deja que el módulo base lleve al campo CAJA.
-      if (blockEventForQuantity(event)) return;
-      ensureCapacityBeforeRegister();
-    }, true);
-
-    // El botón manual/Agregar ahora tampoco puede saltarse la capacidad.
-    add.addEventListener('click', event => {
-      if (blockEventForQuantity(event)) return;
+    add.addEventListener('click', () => {
+      forceInternalCapacity();
       ensureCapacityBeforeRegister();
     }, true);
 
     ['#equipmentLot', '#equipmentBox'].forEach(selector => {
       $(selector)?.addEventListener('input', () => setTimeout(updateCapacityIndicator, 0));
+    });
+
+    document.addEventListener('click', event => {
+      if (!event.target.closest?.('#equipmentBoxNewSessionBtn')) return;
+      setTimeout(() => {
+        forceInternalCapacity();
+        updateCapacityIndicator();
+      }, 0);
+    }, true);
+
+    document.addEventListener('operator:login', () => {
+      setTimeout(() => {
+        forceInternalCapacity();
+        updateCapacityIndicator();
+      }, 0);
     });
   }
 
@@ -278,8 +225,8 @@
     style.id = 'equipmentCapacityStyles';
     style.textContent = `
       .equipment-entry-grid{grid-template-columns:minmax(140px,.75fr) minmax(190px,.95fr) minmax(225px,1.15fr) minmax(105px,.55fr) minmax(105px,.55fr) minmax(125px,.62fr) auto}
-      .equipment-quantity-field .equipment-code{text-align:center;font-size:17px}
-      .equipment-quantity-field input::-webkit-inner-spin-button,.equipment-quantity-field input::-webkit-outer-spin-button{opacity:.65}
+      .equipment-quantity-field .equipment-code{text-align:center;font-size:17px;font-weight:800}
+      #equipmentQuantityDisplay{cursor:default;opacity:1}
       @media(max-width:1450px){.equipment-entry-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.equipment-capture-mode,.equipment-add-btn{align-self:end}.equipment-add-btn{grid-column:auto}}
       @media(max-width:900px){.equipment-entry-grid{grid-template-columns:1fr}.equipment-add-btn{grid-column:1/-1}}
     `;
@@ -289,6 +236,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     if (!$('#equipmentQuantity') || !window.EquipmentRegistry) return;
     injectStyles();
+    installAutomaticQuantityField();
     lastRowCount = getRows().length;
     wireCapacityFlow();
     updateCapacityIndicator();
@@ -296,4 +244,10 @@
     const body = $('#equipmentRegisterBody');
     if (body) new MutationObserver(afterRegistryChanged).observe(body, {childList:true, subtree:true});
   });
+
+  window.EquipmentCapacity = {
+    maxPerBox: MAX_PER_BOX,
+    getCurrentCount: currentCount,
+    refresh: updateCapacityIndicator
+  };
 })();
