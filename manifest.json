@@ -1,0 +1,14 @@
+{
+  "name": "Match Equipos",
+  "short_name": "Match",
+  "description": "Registro, verificación y Match de equipos con sincronización multi-dispositivo.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#090d14",
+  "theme_color": "#090d14",
+  "lang": "es-PA",
+  "icons": [
+    {"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
