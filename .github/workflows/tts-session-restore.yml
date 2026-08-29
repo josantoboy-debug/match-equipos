@@ -1,0 +1,112 @@
+name: Verify restored-session TTS welcome
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/tts-session-restore.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Preserve personalized welcome until first user gesture
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('voice-notifications.js')
+          s = p.read_text(encoding='utf-8')
+
+          anchor = '  let selectedVoice = null;'
+          pending = "  let pendingWelcome = '';"
+          if pending not in s:
+              if anchor not in s:
+                  raise SystemExit('No se encontró selectedVoice')
+              s = s.replace(anchor, anchor + '\n' + pending, 1)
+
+          old_unlock = "    unlocked = true;\n    refreshVoices();\n    drainQueue();"
+          new_unlock = "    unlocked = true;\n    refreshVoices();\n    if (pendingWelcome) {\n      const text = pendingWelcome;\n      pendingWelcome = '';\n      announce(text, {priority:'high', interrupt:true, dedupeMs:0, key:`welcome-unlock:${text}`});\n    }\n    drainQueue();"
+          if old_unlock in s:
+              s = s.replace(old_unlock, new_unlock, 1)
+          elif new_unlock not in s:
+              raise SystemExit('No se encontró unlockFromGesture esperado')
+
+          old_login = "      const name = normalizeSpace(event.detail?.name);\n      announce(name ? `Bienvenida ${name}` : 'Bienvenida', {priority:'high', interrupt:true, key:`operator-login:${name}`, dedupeMs:1500});"
+          new_login = "      const name = normalizeSpace(event.detail?.name);\n      const welcome = name ? `Bienvenida ${name}` : 'Bienvenida';\n      if (!unlocked) pendingWelcome = welcome;\n      else announce(welcome, {priority:'high', interrupt:true, key:`operator-login:${name}`, dedupeMs:1500});"
+          if old_login in s:
+              s = s.replace(old_login, new_login, 1)
+          elif new_login not in s:
+              raise SystemExit('No se encontró handler de login esperado')
+
+          p.write_text(s, encoding='utf-8')
+
+      - name: JavaScript syntax audit
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F "pendingWelcome" voice-notifications.js
+
+      - name: Install browser test dependency
+        run: npm install --no-save puppeteer-core@24.16.0
+
+      - name: Start local application
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/match-restore.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/match-restore.log
+          exit 1
+
+      - name: Chromium restored-session welcome test
+        shell: bash
+        run: |
+          cat > /tmp/match-restore-test.cjs <<'NODE'
+          const puppeteer = require(process.cwd() + '/node_modules/puppeteer-core');
+          const assert = require('assert');
+          (async () => {
+            const browser = await puppeteer.launch({headless:true, executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome', args:['--no-sandbox','--disable-setuid-sandbox','--autoplay-policy=no-user-gesture-required']});
+            const page = await browser.newPage();
+            await page.evaluateOnNewDocument(() => {
+              window.__spoken=[];
+              class MockUtterance { constructor(text){this.text=String(text||'');this.lang='';this.voice=null;this.rate=1;this.pitch=1;this.volume=1;} }
+              const mockSpeech={getVoices:()=>[{name:'Mock Spanish Panama',lang:'es-PA',default:true}],speak:u=>{window.__spoken.push(u.text);setTimeout(()=>u.onend&&u.onend(),5)},cancel:()=>{},addEventListener:()=>{}};
+              Object.defineProperty(window,'SpeechSynthesisUtterance',{configurable:true,writable:true,value:MockUtterance});
+              Object.defineProperty(window,'speechSynthesis',{configurable:true,get:()=>mockSpeech});
+            });
+            const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
+            await page.goto('http://127.0.0.1:4173/?restore-welcome=1',{waitUntil:'domcontentloaded',timeout:15000});
+            await page.evaluate(()=>{ window.__spoken=[]; document.dispatchEvent(new CustomEvent('operator:login',{detail:{id:'restored',name:'Josue Parfait'}})); });
+            let before=await page.evaluate(()=>window.__spoken.slice());
+            assert.strictEqual(before.length,0,'Welcome should wait until a trusted interaction');
+            await page.click('#operatorNewBtn');
+            await page.waitForFunction(()=>window.__spoken.some(t=>t.includes('Bienvenida Josue Parfait')),{timeout:3000});
+            const state=await page.evaluate(()=>({spoken:window.__spoken, unlocked:window.MatchVoiceTTS?.isUnlocked?.()}));
+            assert.strictEqual(state.unlocked,true);
+            assert.strictEqual(errors.length,0,errors.join(' | '));
+            console.log('MATCH_RESTORED_WELCOME_OK',JSON.stringify(state));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node /tmp/match-restore-test.cjs
+
+      - name: Commit only after verification passes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add voice-notifications.js
+          if git diff --cached --quiet; then
+            echo "Restored-session welcome already verified"
+            exit 0
+          fi
+          git commit -m "Preserve TTS welcome for restored operator sessions"
+          git push
