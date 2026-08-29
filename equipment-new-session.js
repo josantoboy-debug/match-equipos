@@ -43,7 +43,11 @@
       message.innerHTML = '<span class="equipment-validation-icon">✓</span><div><strong>Nueva sesión lista</strong><small>Define Asignación / Proceso, Lote, Caja y Cantidad para comenzar un nuevo registro.</small></div>';
     }
 
-    setTimeout(() => $('#equipmentProcess')?.focus() || $('#equipmentLot')?.focus(), 0);
+    setTimeout(() => {
+      const process = $('#equipmentProcess');
+      if (process) process.focus();
+      else $('#equipmentLot')?.focus();
+    }, 0);
   }
 
   function clearRegistryRows() {
