@@ -16,7 +16,7 @@
         grid-template-columns:
           minmax(220px,1.20fr)
           minmax(82px,.42fr)
-          minmax(100px,.50fr)
+          minmax(110px,.55fr)
           minmax(200px,1.05fr)
           minmax(250px,1.35fr)
           minmax(135px,.62fr)
@@ -111,14 +111,14 @@
     <div class="equipment-register-head">
       <div>
         <div class="equipment-register-titleline"><h2>Registrador de equipos por caja</h2><span class="mini-badge">Validación estricta</span></div>
-        <p>LOTE → CAJA → SERIAL → UA / UNIT ADDRESS. CANTIDAD se calcula automáticamente y cada caja admite un máximo de 64 equipos.</p>
+        <p>LOTE → CAJA → CANTIDAD → SERIAL → UA / UNIT ADDRESS. CANTIDAD define cuántos equipos tendrá la caja, con un máximo de 64.</p>
       </div>
       <div class="equipment-file-actions">
         <input id="equipmentImportFile" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt,.json,.accdb,application/msaccess,application/x-msaccess,application/vnd.ms-access" hidden>
-        <button id="equipmentImportBtn" class="secondary" type="button" title="ACCDB: toma Serial + UA del archivo y completa Proceso, Lote y Caja desde la pantalla; máximo 64 por caja.">Cargar registro</button>
+        <button id="equipmentImportBtn" class="secondary" type="button" title="ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y CANTIDAD desde la pantalla. Máximo 64 por caja.">Cargar registro</button>
         <select id="equipmentPrintMode" aria-label="Modo de impresión de caja">
-          <option value="manual">Manual · imprimir con botón</option>
-          <option value="automatic">Automática · al completar 64</option>
+          <option value="manual">Manual · según CANTIDAD</option>
+          <option value="automatic">Automática · según CANTIDAD</option>
         </select>
         <button id="equipmentPrintBtn" class="secondary" type="button" disabled>Imprimir caja</button>
         <select id="equipmentExportFormat" aria-label="Formato de descarga">
@@ -134,19 +134,19 @@
     <div class="equipment-entry-grid">
       <label><span>LOTE <small>Solo letras y números</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE001" inputmode="text"></label>
       <label><span>CAJA <small>Secuencial</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="1"></label>
-      <label class="equipment-quantity-field"><span>CANTIDAD <small>Automática · máximo 64</small></span><input id="equipmentQuantity" type="hidden" value="64"><input id="equipmentQuantityDisplay" class="equipment-code" type="text" value="0" readonly aria-label="Cantidad automática de equipos en la caja actual" title="Se calcula automáticamente según los equipos registrados. Máximo 64."></label>
+      <label class="equipment-quantity-field"><span>CANTIDAD <small>Asignada · máximo 64</small></span><input id="equipmentQuantity" class="equipment-code" type="number" min="1" max="64" step="1" inputmode="numeric" autocomplete="off" placeholder="1–64" aria-label="Cantidad de equipos asignados a la caja"></label>
       <label><span>SERIAL <small>12 caracteres · inicia M</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
       <label><span>UA / UNIT ADDRESS <small>16 ceros = UA desconocida</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" placeholder="0000000000000000"></label>
       <button id="equipmentAddBtn" class="primary equipment-add-btn" type="button">Agregar equipo</button>
     </div>
 
-    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Asignación / Proceso, Lote y Caja. Luego registra SERIAL y UA. La cantidad se calcula automáticamente.</small></div></div>
+    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD asignada (1–64). Luego registra SERIAL y UA.</small></div></div>
 
     <div class="equipment-register-summary">
       <div><span>Total registrados</span><strong id="equipmentTotalCount">0</strong></div>
       <div><span>Lotes</span><strong id="equipmentLotCount">0</strong></div>
       <div><span>Cajas</span><strong id="equipmentBoxCount">0</strong></div>
-      <div><span>Caja actual / capacidad</span><strong id="equipmentCurrentBoxCount">0 / 64</strong><small id="equipmentCurrentBoxLabel">Sin caja seleccionada</small></div>
+      <div><span>Caja actual / cantidad asignada</span><strong id="equipmentCurrentBoxCount">0 / —</strong><small id="equipmentCurrentBoxLabel">Sin caja seleccionada</small></div>
     </div>
 
     <div class="equipment-table-wrap">
@@ -197,17 +197,17 @@
 <script src="matches-export.js"></script>
 <script src="equipment-register.js?v=1bfa15d"></script>
 <script src="equipment-process.js?v=bcc805e"></script>
-<script src="equipment-capacity.js?v=01175b8"></script>
-<script src="equipment-entry-flow.js?v=77798de"></script>
+<script src="equipment-capacity.js?v=a8947a5"></script>
+<script src="equipment-entry-flow.js?v=4ced8a8"></script>
 <script src="equipment-access-import.js?v=368929e"></script>
 <script src="equipment-auto-focus.js?v=6627bdf"></script>
 <script src="equipment-input-lock.js?v=7f397bf"></script>
 <script src="operator-session.js"></script>
 <script src="operator-lock.js"></script>
 <script src="operator-counter-fix.js"></script>
-<script src="equipment-box-print.js?v=ab56e9c"></script>
+<script src="equipment-box-print.js?v=c0e53fa"></script>
 <script src="registry-export.js?v=564220c"></script>
-<script src="audit-fixes.js?v=4d65906"></script>
+<script src="audit-fixes.js?v=02c3364"></script>
 <script src="unified-export.js?v=870f693"></script>
 <script src="export-summary.js?v=1a4c24c"></script>
 <script>
