@@ -21,6 +21,7 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           # 1) Keep strict 18-digit validation for new capture, but accept
           # historical 16-digit UA values when importing saved registers.
@@ -41,8 +42,7 @@ jobs:
           elif new_import not in s:
               raise SystemExit('No se encontró validación UA del importador')
 
-          # Treat both historical 16-zero UA and current 18-zero UA as unknown
-          # so they can repeat across different serials.
+          # Both legacy 16-zero and current 18-zero UA are unknown values.
           if "const UNKNOWN_UA = '000000000000000000';" in s and 'const isUnknownImportedUA' not in s:
               s = s.replace(
                   "const UNKNOWN_UA = '000000000000000000';",
@@ -54,8 +54,8 @@ jobs:
           p.write_text(s, encoding='utf-8')
 
           # 2) Old exports did not contain CANTIDAD. They came from the legacy
-          # fixed 64-per-box workflow, so restore missing quantity as 64 instead
-          # of treating the current row count as the final capacity.
+          # 64-per-box flow, so a missing quantity restores to 64 rather than
+          # treating the current count as the final capacity.
           p = Path('equipment-import-context.js')
           s = p.read_text(encoding='utf-8')
           old1 = "quantity: normalizeQuantity(fileContext?.quantity) || normalizeQuantity(rowContext.quantity) || Math.min(MAX_PER_BOX, Math.max(1, rowContext.count))"
@@ -75,19 +75,18 @@ jobs:
           # 3) Force fresh browser versions.
           p = Path('audit-fixes.js')
           s = p.read_text(encoding='utf-8')
-          import re
-          s, n = re.subn(r"equipment-import-context\\.js\\?v=[A-Za-z0-9._-]+", "equipment-import-context.js?v=legacy64-20260829a", s, count=1)
-          if n != 1 and 'equipment-import-context.js?v=legacy64-20260829a' not in s:
+          s, n = re.subn(r"equipment-import-context\.js\?v=[A-Za-z0-9._-]+", "equipment-import-context.js?v=legacy64-20260829b", s, count=1)
+          if n != 1 and 'equipment-import-context.js?v=legacy64-20260829b' not in s:
               raise SystemExit('No se pudo versionar equipment-import-context.js')
           p.write_text(s, encoding='utf-8')
 
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
-          s, n1 = re.subn(r"equipment-register\\.js\\?v=[A-Za-z0-9._-]+", "equipment-register.js?v=legacyload-20260829a", s, count=1)
-          s, n2 = re.subn(r"audit-fixes\\.js\\?v=[A-Za-z0-9._-]+", "audit-fixes.js?v=legacyload-20260829a", s, count=1)
-          if n1 != 1 and 'equipment-register.js?v=legacyload-20260829a' not in s:
+          s, n1 = re.subn(r"equipment-register\.js\?v=[A-Za-z0-9._-]+", "equipment-register.js?v=legacyload-20260829b", s, count=1)
+          s, n2 = re.subn(r"audit-fixes\.js\?v=[A-Za-z0-9._-]+", "audit-fixes.js?v=legacyload-20260829b", s, count=1)
+          if n1 != 1 and 'equipment-register.js?v=legacyload-20260829b' not in s:
               raise SystemExit('No se pudo versionar equipment-register.js')
-          if n2 != 1 and 'audit-fixes.js?v=legacyload-20260829a' not in s:
+          if n2 != 1 and 'audit-fixes.js?v=legacyload-20260829b' not in s:
               raise SystemExit('No se pudo versionar audit-fixes.js')
           p.write_text(s, encoding='utf-8')
 
