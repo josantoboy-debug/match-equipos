@@ -5,7 +5,17 @@
   const $ = (s, r = document) => r.querySelector(s);
   let bypassRegisterClick = false;
   let realtimeStarted = false;
-  const queuedBoxSignatures = new Set();
+  let adminLoaded = false;
+  const inFlightBoxes = new Set();
+
+  function ensureAdminPanel() {
+    if (adminLoaded || core()?.AuthService.operator?.role !== 'admin') return;
+    adminLoaded = true;
+    const script = document.createElement('script');
+    script.src = `admin-panel.js?v=${encodeURIComponent(core().config.appVersion)}`;
+    script.onerror = error => { adminLoaded = false; core()?.ErrorService.capture('admin-panel-load', error); };
+    document.head.appendChild(script);
+  }
 
   function showCloudToast(title, message, tone = 'ok') {
     const toast = $('#toast');
@@ -46,7 +56,7 @@
     if (!navigator.onLine) {
       await c.SyncService.enqueue('equipment.register', payload);
       c.AuditService.record('equipment_queued_offline', { host_sn: payload.host_sn, ua: payload.ua, result: payload.record_type });
-      showCloudToast('Trabajando sin conexión', 'El registro se guardará localmente y se sincronizará al recuperar Internet.', 'warn');
+      showCloudToast('Trabajando sin conexión', 'El registro se guardó localmente y se sincronizará al recuperar Internet.', 'warn');
       return;
     }
 
@@ -65,11 +75,9 @@
       bypassRegisterClick = true;
       $('#registerBtn')?.click();
       bypassRegisterClick = false;
-      if (result.matched) {
-        showCloudToast('MATCH CENTRAL CORRECTO', `${payload.host_sn} / ${payload.ua} fue asociado entre dispositivos.`, 'ok');
-      } else {
-        showCloudToast('Registro sincronizado', 'Guardado en Supabase. La contraparte aún está pendiente.', 'ok');
-      }
+      if (result.review) showCloudToast('REVISAR MATCH', result.assignment || 'El serial coincide, pero las UA reales son diferentes.', 'warn');
+      else if (result.matched) showCloudToast('MATCH CENTRAL CORRECTO', `${payload.host_sn} / ${result.ua || payload.ua} fue asociado entre dispositivos.`, 'ok');
+      else showCloudToast('Registro sincronizado', 'Guardado en Supabase. La contraparte aún está pendiente.', 'ok');
     } catch (error) {
       bypassRegisterClick = true;
       $('#registerBtn')?.click();
@@ -80,41 +88,43 @@
     }
   }
 
+  function boxPayload(row, op) {
+    const c = core();
+    const serial = c.ValidationService.normalizeHost(row.serial);
+    const ua = c.ValidationService.normalizeUA(row.ua);
+    if (!c.ValidationService.isValidHost(serial) || !c.ValidationService.isValidUA(ua)) return null;
+    const signature = `${String(row.lot || '').toUpperCase()}|${String(row.box || '').toUpperCase()}|${serial}|${ua}`;
+    return { signature, data: { client_id: signature, lot: String(row.lot || '').trim(), box: String(row.box || '').trim(), serial, ua, process: row.process || null, quantity: Number(row.quantity) || null, box_position: Number(row.boxPosition) || null, operator_id: op.id, source: row.origin || 'local-registry', payload: { local_id: row.id || null } } };
+  }
+
+  async function syncOneBox(item) {
+    const c = core();
+    if (inFlightBoxes.has(item.signature)) return;
+    inFlightBoxes.add(item.signature);
+    try {
+      if (!navigator.onLine) { await c.StorageCache.setCache(`box:${item.signature}`, item.data); return; }
+      const { error } = await c.DataService.getClient().from('box_registry_records').upsert(item.data, { onConflict: 'client_id', ignoreDuplicates: false });
+      if (error && error.code !== '23505') throw error;
+      await c.StorageCache.delete('cache', `box:${item.signature}`).catch(() => {});
+    } catch (error) { core()?.ErrorService.capture('box-registry-sync', error); }
+    finally { inFlightBoxes.delete(item.signature); }
+  }
+
   async function syncBoxRegistry() {
     const c = core();
     const op = c?.AuthService.operator;
     const rows = window.EquipmentRegistry?.getRows?.();
     if (!op || !Array.isArray(rows) || !rows.length) return;
-    const client = c.DataService.getClient();
-    for (const row of rows) {
-      const serial = c.ValidationService.normalizeHost(row.serial);
-      const ua = c.ValidationService.normalizeUA(row.ua);
-      if (!c.ValidationService.isValidHost(serial) || !c.ValidationService.isValidUA(ua)) continue;
-      const signature = `${String(row.lot || '').toUpperCase()}|${String(row.box || '').toUpperCase()}|${serial}|${ua}`;
-      if (queuedBoxSignatures.has(signature)) continue;
-      queuedBoxSignatures.add(signature);
-      const payload = {
-        client_id: signature,
-        lot: String(row.lot || '').trim(),
-        box: String(row.box || '').trim(),
-        serial,
-        ua,
-        process: row.process || null,
-        quantity: Number(row.quantity) || null,
-        box_position: Number(row.boxPosition) || null,
-        operator_id: op.id,
-        source: row.origin || 'local-registry',
-        payload: { local_id: row.id || null }
-      };
-      if (!navigator.onLine) {
-        await c.StorageCache.setCache(`box:${signature}`, payload);
-        continue;
-      }
-      const { error } = await client.from('box_registry_records').upsert(payload, { onConflict: 'client_id', ignoreDuplicates: false });
-      if (error && error.code !== '23505') {
-        queuedBoxSignatures.delete(signature);
-        c.ErrorService.capture('box-registry-sync', error);
-      }
+    for (const row of rows) { const item = boxPayload(row, op); if (item) await syncOneBox(item); }
+  }
+
+  async function flushCachedBoxes() {
+    const c = core();
+    if (!navigator.onLine || !c?.AuthService.operator) return;
+    const cached = await c.StorageCache.getAll('cache');
+    for (const item of cached.filter(x => String(x.key || '').startsWith('box:'))) {
+      const signature = String(item.key).slice(4);
+      await syncOneBox({ signature, data: item.value });
     }
   }
 
@@ -137,11 +147,9 @@
     client.channel(`production-${Date.now()}`)
       .on('postgres_changes', { event:'INSERT', schema:'public', table:'equipment_matches' }, payload => {
         const row = payload.new || {};
-        showCloudToast('Nuevo Match sincronizado', `${row.host_sn || ''} ${row.ua || ''}`.trim(), 'ok');
+        showCloudToast(row.result === 'Revisar' ? 'Match para revisar' : 'Nuevo Match sincronizado', `${row.host_sn || ''} ${row.ua || ''}`.trim(), row.result === 'Revisar' ? 'warn' : 'ok');
       })
-      .on('postgres_changes', { event:'*', schema:'public', table:'operators' }, () => {
-        document.dispatchEvent(new CustomEvent('operators:changed'));
-      })
+      .on('postgres_changes', { event:'*', schema:'public', table:'operators' }, () => document.dispatchEvent(new CustomEvent('operators:changed')))
       .subscribe();
   }
 
@@ -157,15 +165,16 @@
 
   function bind() {
     $('#registerBtn')?.addEventListener('click', event => cloudRegisterBeforeLocal(event).catch(error => core()?.ErrorService.capture('register-bridge', error)), true);
+    $('#uaInput')?.addEventListener('keydown', event => {
+      if (event.key === 'Enter') cloudRegisterBeforeLocal(event).catch(error => core()?.ErrorService.capture('scanner-register-bridge', error));
+    }, true);
+    window.addEventListener('online', () => { flushCachedBoxes().catch(() => {}); syncBoxRegistry().catch(() => {}); });
     document.addEventListener('operator:login', () => {
-      startRealtime();
-      syncBoxRegistry().catch(() => {});
+      startRealtime(); ensureAdminPanel(); flushCachedBoxes().catch(() => {}); syncBoxRegistry().catch(() => {});
     });
-    document.addEventListener('operators:changed', () => {
-      if (core()?.AuthService.operator?.role === 'admin') core().AuthService.adminList().catch(() => {});
-    });
-    bindAuditButtons();
-    observeBoxRegistry();
+    document.addEventListener('production:session-changed', ensureAdminPanel);
+    document.addEventListener('operators:changed', () => { if (core()?.AuthService.operator?.role === 'admin') core().AuthService.adminList().catch(() => {}); });
+    bindAuditButtons(); observeBoxRegistry(); ensureAdminPanel();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind, { once:true });
