@@ -19,6 +19,16 @@
     return /^\d+$/.test(value) && Number(value) >= 1;
   }
 
+  function validSerial() {
+    const value = String($('#equipmentSerial')?.value || '').trim().replace(/\s+/g, '').toUpperCase();
+    return /^M[A-Z0-9]{11}$/.test(value);
+  }
+
+  function validUA() {
+    const value = String($('#equipmentUA')?.value || '').trim().replace(/[-\s]/g, '');
+    return /^0000\d{12}$/.test(value);
+  }
+
   function readyForNextSerial() {
     return automaticMode() && !editingNow() && validQuantity() && !!String($('#equipmentLot')?.value || '').trim() && !!String($('#equipmentBox')?.value || '').trim();
   }
@@ -42,8 +52,7 @@
     new MutationObserver(() => {
       const count = window.EquipmentRegistry?.getRows?.().length || 0;
       if (count > lastCount) {
-        // Primero deja que el módulo de capacidad mantenga o cambie la caja.
-        // Luego devuelve siempre el flujo al SERIAL del siguiente equipo.
+        // Solo después de un registro realmente agregado se vuelve al SERIAL.
         focusSerial(80);
       }
       lastCount = count;
@@ -53,15 +62,15 @@
   document.addEventListener('DOMContentLoaded', () => {
     const serial = $('#equipmentSerial');
     const ua = $('#equipmentUA');
-    const mode = $('#equipmentRegisterModeBtn');
     if (!serial || !ua) return;
 
     watchRegistrations();
 
     ua.addEventListener('keydown', event => {
       if (event.key !== 'Enter' || !automaticMode()) return;
-      // El registro base valida/guarda primero. Este refuerzo asegura que,
-      // haya o no cambio automático de caja, el siguiente destino sea SERIAL.
+      // Si SERIAL o UA están mal, no programes el salto al siguiente SERIAL.
+      // El campo inválido debe conservar el foco hasta ser corregido.
+      if (!validSerial() || !validUA()) return;
       focusSerial(120);
     });
 
