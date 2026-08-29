@@ -11,6 +11,23 @@
     document.head.appendChild(style);
   }
 
+  function loadThemeControl() {
+    if (!document.querySelector('link[data-theme-control]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'theme-control.css?v=56bfc67';
+      link.dataset.themeControl = '1';
+      document.head.appendChild(link);
+    }
+    if (window.AppTheme || document.querySelector('script[data-theme-control]')) return;
+    const script = document.createElement('script');
+    script.src = 'theme-control.js?v=f061577';
+    script.dataset.themeControl = '1';
+    script.async = false;
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar theme-control.js');
+    document.head.appendChild(script);
+  }
+
   function restoreNativeAnchorClick() {
     try {
       if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.click === 'function') {
@@ -118,7 +135,10 @@
     if (problems.length) console.warn('[match-equipos] Auditoría de carga: faltan módulos', problems);
   }
 
+  loadThemeControl();
+
   document.addEventListener('DOMContentLoaded', () => {
+    loadThemeControl();
     restoreNativeAnchorClick();
     normalizeNumericUAInput();
     guardQuantity();
@@ -130,6 +150,7 @@
   });
 
   document.addEventListener('operator:login', () => {
+    loadThemeControl();
     restoreNativeAnchorClick();
     guardQuantity();
     loadExportSummary();
@@ -142,6 +163,7 @@
   window.MatchEquiposAuditFixes = {
     restoreNativeAnchorClick,
     healthCheck,
+    loadThemeControl,
     loadExportSummary,
     loadEquipmentNewSession,
     loadEquipmentProcessHistory,
