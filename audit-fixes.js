@@ -89,7 +89,7 @@
       return;
     }
     const script = document.createElement('script');
-    script.src = 'equipment-new-session.js?v=af744ee';
+    script.src = 'equipment-new-session.js?v=ccf3874';
     script.dataset.equipmentNewSession = '1';
     script.async = false;
     script.onload = () => window.EquipmentNewSession?.install?.();
