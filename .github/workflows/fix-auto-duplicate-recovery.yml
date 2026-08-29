@@ -2,9 +2,10 @@ name: Fix automatic duplicate recovery
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - '.github/workflows/fix-auto-duplicate-recovery.yml'
+      - .github/workflows/fix-auto-duplicate-recovery.yml
 
 permissions:
   contents: write
@@ -17,10 +18,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Recover automatic capture after duplicate
-        shell: python
+      - name: Patch duplicate recovery
         run: |
+          python3 <<'PY'
           from pathlib import Path
+          import re
 
           p = Path('equipment-register.js')
           s = p.read_text(encoding='utf-8')
@@ -60,28 +62,27 @@ jobs:
     }
 """
           if old not in s:
-              raise SystemExit('No se encontró el bloque actual de duplicados')
-          s = s.replace(old, new, 1)
-          p.write_text(s, encoding='utf-8')
+              raise SystemExit('Duplicate block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
 
           idx = Path('index.html')
           html = idx.read_text(encoding='utf-8')
-          import re
-          html2, n = re.subn(r'equipment-register\.js\?v=[^"\']+', 'equipment-register.js?v=dup-recovery-20260829', html, count=1)
+          html2, n = re.subn(r"equipment-register\.js\?v=[^\"']+", 'equipment-register.js?v=dup-recovery-20260829', html, count=1)
           if n != 1:
-              raise SystemExit('No se encontró equipment-register.js en index.html')
+              raise SystemExit('equipment-register script tag not found')
           idx.write_text(html2, encoding='utf-8')
+          PY
 
-      - name: Verify automatic duplicate recovery
+      - name: Verify fix
         run: |
           node --check equipment-register.js
           grep -F "Se omitió el duplicado y el registro automático continúa." equipment-register.js
           grep -F "serialInput.value = '';" equipment-register.js
           grep -F "uaInput.value = '';" equipment-register.js
           grep -F "serialInput?.focus({preventScroll:true});" equipment-register.js
-          grep -F 'equipment-register.js?v=dup-recovery-20260829' index.html
+          grep -F "equipment-register.js?v=dup-recovery-20260829" index.html
 
-      - name: Commit verified fix
+      - name: Commit fix
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
