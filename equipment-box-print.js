@@ -36,9 +36,9 @@
 
   function quantity() {
     const raw = String($('#equipmentQuantity')?.value || '').trim();
-    if (!/^\d+$/.test(raw)) return 0;
+    if (!/^\d+$/.test(raw)) return 64;
     const n = Number(raw);
-    return Number.isSafeInteger(n) && n > 0 ? n : 0;
+    return Number.isSafeInteger(n) && n > 0 ? n : 64;
   }
 
   function boxKey(lot, box, cap) {
@@ -46,11 +46,12 @@
   }
 
   function rowsInBox(lot, box) {
+    if (!norm(lot) || !norm(box)) return [];
     return getRows().filter(row => upper(row.lot) === upper(lot) && upper(row.box) === upper(box));
   }
 
   function operatorName() {
-    return window.OperatorSession?.getCurrentOperator?.()?.name || 'Sin operador';
+    return norm(window.OperatorSession?.getCurrentOperator?.()?.name);
   }
 
   function printMode() {
@@ -84,7 +85,7 @@
   function processForBox(boxRows) {
     const values = [...new Set(boxRows.map(row => norm(row.process)).filter(Boolean))];
     if (values.length) return values.join(' / ');
-    return norm(window.EquipmentProcess?.getCurrent?.()) || 'Sin asignación';
+    return norm(window.EquipmentProcess?.getCurrent?.());
   }
 
   function completionDate(boxRows) {
@@ -114,6 +115,26 @@
     };
   }
 
+  function buildManualSnapshot() {
+    const lot = norm($('#equipmentLot')?.value);
+    const box = norm($('#equipmentBox')?.value);
+    const cap = quantity();
+    const boxRows = rowsInBox(lot, box);
+    const now = new Date();
+
+    return {
+      key: boxKey(lot || 'MANUAL', box || 'SIN-CAJA', cap),
+      lot,
+      box,
+      count: boxRows.length,
+      capacity: cap,
+      process: processForBox(boxRows),
+      operator: operatorName(),
+      printMode: 'manual',
+      completedAt: now.toISOString()
+    };
+  }
+
   function findLatestCompleteBox() {
     const cap = quantity();
     if (!cap) return null;
@@ -140,22 +161,24 @@
     if (!button || !select) return;
 
     if (!lastCompleted) lastCompleted = findLatestCompleteBox();
-    const ready = !!lastCompleted;
-    button.disabled = !ready;
-    button.textContent = ready ? `Imprimir caja ${lastCompleted.box}` : 'Imprimir caja';
-    button.title = ready
-      ? `Caja ${lastCompleted.box} completa · ${lastCompleted.count} equipos`
-      : 'Se habilita cuando una caja alcanza la cantidad asignada.';
+
+    // La impresión manual siempre está disponible, incluso con campos vacíos.
+    button.disabled = false;
+    const currentBox = norm($('#equipmentBox')?.value);
+    const printableBox = lastCompleted?.box || currentBox;
+    button.textContent = printableBox ? `Imprimir caja ${printableBox}` : 'Imprimir caja';
+    button.title = 'Disponible para impresión manual aunque existan campos vacíos. Los datos faltantes se imprimen en blanco.';
     select.title = `Modo de impresión: ${modeLabel()}`;
   }
 
   function printHtml(data) {
-    const date = new Date(data.completedAt);
-    const dateText = date.toLocaleDateString('es-PA');
-    const timeText = date.toLocaleTimeString('es-PA', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    const date = new Date(data.completedAt || Date.now());
+    const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+    const dateText = safeDate.toLocaleDateString('es-PA');
+    const timeText = safeDate.toLocaleTimeString('es-PA', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
 
     return `<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><title>Caja ${escapeHtml(data.box)}</title>
+<html lang="es"><head><meta charset="utf-8"><title>${data.box ? `Caja ${escapeHtml(data.box)}` : 'Registro de caja'}</title>
 <style>
   @page{size:2.5in 2in;margin:0}
   *{box-sizing:border-box}
@@ -165,10 +188,10 @@
   h1{margin:0 0 .045in;text-align:center;font-size:12pt;line-height:1;font-weight:800;letter-spacing:.2px}
   .process{text-align:center;margin:0 0 .055in;line-height:1.05}
   .caption{display:block;font-size:5.8pt;line-height:1.05;font-weight:700;text-transform:uppercase;letter-spacing:.25px}
-  .process strong{display:block;margin-top:.018in;font-size:10pt;line-height:1.05;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .process strong{display:block;margin-top:.018in;min-height:10.5pt;font-size:10pt;line-height:1.05;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .data{display:grid;grid-template-columns:1.45fr .55fr;column-gap:.10in;row-gap:.045in;align-items:start}
   .item{min-width:0}
-  .item strong{display:block;margin-top:.012in;font-size:8.5pt;line-height:1.05;font-weight:800;overflow-wrap:anywhere}
+  .item strong{display:block;margin-top:.012in;min-height:9pt;font-size:8.5pt;line-height:1.05;font-weight:800;overflow-wrap:anywhere}
   .item.operator{grid-column:1/-1}
   .item.operator strong{font-size:8pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .date-time{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;column-gap:.10in}
@@ -179,27 +202,24 @@
 </style></head><body>
 <section class="label">
   <h1>REGISTRO DE CAJA</h1>
-  <div class="process"><span class="caption">Asignación / Proceso</span><strong>${escapeHtml(data.process)}</strong></div>
+  <div class="process"><span class="caption">Asignación / Proceso</span><strong>${escapeHtml(data.process || '')}</strong></div>
   <div class="data">
-    <div class="item"><span class="caption">Lote</span><strong>${escapeHtml(data.lot)}</strong></div>
-    <div class="item"><span class="caption">Caja</span><strong>${escapeHtml(data.box)}</strong></div>
-    <div class="item"><span class="caption">N.º de equipos</span><strong>${data.count}</strong></div>
+    <div class="item"><span class="caption">Lote</span><strong>${escapeHtml(data.lot || '')}</strong></div>
+    <div class="item"><span class="caption">Caja</span><strong>${escapeHtml(data.box || '')}</strong></div>
+    <div class="item"><span class="caption">N.º de equipos</span><strong>${Number.isFinite(Number(data.count)) ? Number(data.count) : 0}</strong></div>
     <div class="item"></div>
     <div class="date-time">
       <div class="item"><span class="caption">Fecha</span><strong>${escapeHtml(dateText)}</strong></div>
       <div class="item"><span class="caption">Hora</span><strong>${escapeHtml(timeText)}</strong></div>
     </div>
-    <div class="item operator"><span class="caption">Operador</span><strong>${escapeHtml(data.operator)}</strong></div>
+    <div class="item operator"><span class="caption">Operador</span><strong>${escapeHtml(data.operator || '')}</strong></div>
   </div>
 </section>
 </body></html>`;
   }
 
   function openPrint(data, source = 'manual') {
-    if (!data) {
-      showToast('Caja no lista', 'Completa la cantidad asignada antes de imprimir.', 'warn');
-      return false;
-    }
+    const printable = data || buildManualSnapshot();
 
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
@@ -220,7 +240,7 @@
     }
 
     doc.open();
-    doc.write(printHtml(data));
+    doc.write(printHtml(printable));
     doc.close();
 
     const cleanup = () => setTimeout(() => iframe.remove(), 300);
@@ -230,7 +250,7 @@
         try {
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
-          if (source === 'automatic') autoPrinted.add(data.key);
+          if (source === 'automatic') autoPrinted.add(printable.key);
         } catch (error) {
           console.error('[equipment-box-print]', error);
           showToast('Impresión bloqueada', 'Usa el botón Imprimir caja para abrirla manualmente.', 'warn');
@@ -326,18 +346,14 @@
     });
 
     button.addEventListener('click', () => {
-      const data = lastCompleted || findLatestCompleteBox();
-      if (!data) {
-        showToast('Caja no completa', 'El botón se habilita cuando la caja alcanza la cantidad asignada.', 'warn');
-        return;
-      }
-      lastCompleted = {...data, printMode: printMode(), operator: operatorName()};
-      openPrint(lastCompleted, 'manual');
+      // Manual siempre imprime el contexto actual, aunque haya campos vacíos
+      // o la caja todavía no haya alcanzado 64 equipos.
+      const data = buildManualSnapshot();
+      openPrint(data, 'manual');
     });
 
-    $('#equipmentQuantity')?.addEventListener('input', () => {
-      lastCompleted = findLatestCompleteBox();
-      updateControls();
+    ['#equipmentQuantity', '#equipmentLot', '#equipmentBox', '#equipmentProcess'].forEach(selector => {
+      $(selector)?.addEventListener('input', updateControls);
     });
 
     document.addEventListener('operator:login', restoreMode);
@@ -349,14 +365,15 @@
 
     updateControls();
     window.EquipmentBoxPrint = {
-      printLast: () => openPrint(lastCompleted || findLatestCompleteBox(), 'manual'),
+      printLast: () => openPrint(buildManualSnapshot(), 'manual'),
       getLastCompleted: () => lastCompleted ? {...lastCompleted} : null,
       getMode: printMode,
       setMode: mode => {
         select.value = mode === 'automatic' ? 'automatic' : 'manual';
         saveMode();
         updateControls();
-      }
+      },
+      buildManualSnapshot
     };
   }
 
