@@ -135,8 +135,8 @@
       <label><span>LOTE <small>Solo letras y números</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE001" inputmode="text"></label>
       <label><span>CAJA <small>Secuencial</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="1"></label>
       <label class="equipment-quantity-field"><span>CANTIDAD <small>Límite de la caja · máximo 64</small></span><input id="equipmentQuantity" class="equipment-code" type="number" min="1" max="64" step="1" inputmode="numeric" autocomplete="off" placeholder="1–64" aria-label="Cantidad de equipos asignados a la caja"></label>
-      <label><span>SERIAL <small>12 caracteres · inicia M</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
-      <label><span>UA / UNIT ADDRESS <small>16 ceros = UA desconocida</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" placeholder="0000000000000000"></label>
+      <label><span>SERIAL <small>M + 11 letras/números</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
+      <label><span>UA / UNIT ADDRESS <small>0000 + 14 dígitos · 18 total</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" maxlength="18" placeholder="000000000000000000"></label>
       <button id="equipmentAddBtn" class="primary equipment-add-btn" type="button">Agregar equipo</button>
     </div>
 
@@ -195,13 +195,13 @@
 <script src="search-mode.js"></script>
 <script src="file-index.js"></script>
 <script src="matches-export.js"></script>
-<script src="equipment-register.js?v=1bfa15d"></script>
+<script src="equipment-register.js?v=d598d32"></script>
 <script src="equipment-process.js?v=bcc805e"></script>
 <script src="equipment-capacity.js?v=df7b530"></script>
-<script src="equipment-entry-flow.js?v=4ced8a8"></script>
-<script src="equipment-access-import.js?v=e19adec"></script>
-<script src="equipment-auto-focus.js?v=958d18d"></script>
-<script src="equipment-input-lock.js?v=7f397bf"></script>
+<script src="equipment-entry-flow.js?v=3d3b43f"></script>
+<script src="equipment-access-import.js?v=82d2468"></script>
+<script src="equipment-auto-focus.js?v=1abe839"></script>
+<script src="equipment-input-lock.js?v=91aaaa0"></script>
 <script src="operator-session.js"></script>
 <script src="operator-lock.js"></script>
 <script src="operator-counter-fix.js"></script>
