@@ -35,13 +35,24 @@
   function guardQuantity() {
     const input = $('#equipmentQuantity');
     if (!input) return;
-    input.value = String(MAX_PER_BOX);
-    input.setAttribute('value', String(MAX_PER_BOX));
-    input.classList.remove('field-invalid');
+    input.type = 'number';
+    input.min = '1';
+    input.max = String(MAX_PER_BOX);
+    input.step = '1';
+    input.inputMode = 'numeric';
+    input.removeAttribute('aria-hidden');
+    input.removeAttribute('tabindex');
+    input.removeAttribute('value');
+
     if (input.dataset.auditGuarded === '1') return;
     input.dataset.auditGuarded = '1';
     input.addEventListener('input', event => {
-      event.target.value = String(MAX_PER_BOX);
+      const raw = String(event.target.value || '').replace(/\D/g, '').slice(0, 2);
+      if (event.target.value !== raw) event.target.value = raw;
+      const value = Number(raw);
+      const valid = Number.isInteger(value) && value >= 1 && value <= MAX_PER_BOX;
+      event.target.classList.toggle('field-valid', valid);
+      event.target.classList.toggle('field-invalid', !!raw && !valid);
     }, true);
   }
 
@@ -61,7 +72,7 @@
       return;
     }
     const script = document.createElement('script');
-    script.src = 'equipment-new-session.js?v=3dfc989';
+    script.src = 'equipment-new-session.js?v=assigned-qty';
     script.dataset.equipmentNewSession = '1';
     script.async = false;
     script.onload = () => window.EquipmentNewSession?.install?.();
@@ -104,9 +115,7 @@
       checkedAt: new Date().toISOString()
     };
 
-    if (problems.length) {
-      console.warn('[match-equipos] Auditoría de carga: faltan módulos', problems);
-    }
+    if (problems.length) console.warn('[match-equipos] Auditoría de carga: faltan módulos', problems);
   }
 
   document.addEventListener('DOMContentLoaded', () => {
