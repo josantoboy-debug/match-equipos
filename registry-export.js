@@ -21,18 +21,51 @@
     showToast.timer = setTimeout(() => toast.classList.remove('show'), 4200);
   }
 
-  function fallbackName(extension) {
-    const d = new Date();
-    const p = n => String(n).padStart(2, '0');
-    return `Registro_Equipos_Cajas_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${extension}`;
+  function safePart(value, fallback = 'SIN-DATO', maxLength = 42) {
+    const text = String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-{2,}/g, '-');
+    return (text || fallback).slice(0, maxLength);
   }
 
-  function exportName(extension) {
-    return window.OperatorSession?.nextExportName?.('REGISTRO', extension) || fallbackName(extension);
+  function uniqueValues(rows, key) {
+    return [...new Set(rows.map(row => String(row?.[key] ?? '').trim()).filter(Boolean))];
+  }
+
+  function compactDescriptor(values, singlePrefix, multiLabel) {
+    if (!values.length) return `${singlePrefix}-SIN-DATO`;
+    if (values.length === 1) return `${singlePrefix}-${safePart(values[0])}`;
+    return `${multiLabel}-${values.length}`;
   }
 
   function operatorName() {
     return window.OperatorSession?.getCurrentOperator?.()?.name || '';
+  }
+
+  function buildOrganizedExportName(extension, rows) {
+    const now = new Date();
+    const p = n => String(n).padStart(2, '0');
+    const date = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+    const time = `${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+
+    const processes = uniqueValues(rows, 'ASIGNACIÓN / PROCESO');
+    const lots = uniqueValues(rows, 'LOTE');
+    const boxes = uniqueValues(rows, 'CAJA');
+    const operator = safePart(operatorName(), 'SIN-OPERADOR', 32);
+
+    const processPart = processes.length === 1
+      ? safePart(processes[0], 'SIN-PROCESO', 36)
+      : `VARIOS-PROCESOS-${Math.max(1, processes.length)}`;
+    const lotPart = compactDescriptor(lots, 'LOTE', 'VARIOS-LOTES');
+    const boxPart = compactDescriptor(boxes, 'CAJA', 'VARIAS-CAJAS');
+    const countPart = `${rows.length}-EQ`;
+
+    return `${date}_REGISTRO_${processPart}_${lotPart}_${boxPart}_${countPart}_${operator}_${time}.${extension}`;
   }
 
   function formatDate(value) {
@@ -163,12 +196,12 @@
         const headers = Object.keys(rows[0]);
         payload = [
           headers.map(csvEscape).join(','),
-          ...rows.map(row => headers.map(header => csvEscape(row[header])).join(','))
+          ...rows.map(row => headers.map(header => csvEscape(row[header])).join(',') )
         ].join('\r\n');
         mime = 'text/csv;charset=utf-8';
       }
 
-      const filename = exportName(format);
+      const filename = buildOrganizedExportName(format, rows);
       if (format === 'xlsx') nativeDownload(payload, filename);
       else downloadText(payload, mime, filename);
 
@@ -216,15 +249,12 @@
         return;
       }
 
-      // Permitimos que el listener original continúe solo para que actualice
-      // su estado interno dirty=false. Sus APIs de descarga quedan anuladas
-      // durante este mismo clic, evitando un segundo archivo y otro contador.
       temporarilySuppressLegacyDownload();
       setTimeout(() => {
         showToast('Registro descargado', `${result.filename} · ${result.count} equipos.`, 'ok');
       }, 20);
     }, true);
 
-    window.RegistryExport = {exportRegistry};
+    window.RegistryExport = {exportRegistry, buildOrganizedExportName};
   });
 })();
