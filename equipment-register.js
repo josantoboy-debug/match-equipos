@@ -21,6 +21,7 @@
   const normSerial = value => String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
   const normUA = value => String(value ?? '').trim().replace(/[-\s]/g, '');
   const UNKNOWN_UA = '000000000000000000';
+  const isUnknownImportedUA = value => /^(?:0{16}|0{18})$/.test(String(value || ''));
   const normText = value => String(value ?? '').trim();
   const fmt = value => new Date(value).toLocaleString('es-PA');
 
@@ -45,6 +46,17 @@
     if (!normalized.startsWith('0000')) return {valid:false, value:normalized, message:'El UA / Unit Address debe iniciar con 0000.'};
     if (normalized.length !== 18) return {valid:false, value:normalized, message:`El UA / Unit Address debe ser 0000 + 14 dígitos (18 en total); tiene ${normalized.length}.`};
     if (!/^0000\d{14}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address debe cumplir exactamente 0000 + 14 dígitos.'};
+    return {valid:true, value:normalized, message:''};
+  }
+
+  // Compatibilidad de carga: los registros históricos exportados por la app pueden tener UA de 16 dígitos.
+  // La captura nueva conserva validateUA() con la regla actual de 18 dígitos.
+  function validateImportedUA(value) {
+    const normalized = normUA(value);
+    if (!normalized) return {valid:false, value:normalized, message:'El UA / Unit Address es obligatorio.'};
+    if (!/^\d+$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address solo puede contener dígitos.'};
+    if (!normalized.startsWith('0000')) return {valid:false, value:normalized, message:'El UA / Unit Address debe iniciar con 0000.'};
+    if (!/^0000(?:\d{12}|\d{14})$/.test(normalized)) return {valid:false, value:normalized, message:'El UA importado debe tener 16 o 18 dígitos e iniciar con 0000.'};
     return {valid:true, value:normalized, message:''};
   }
 
@@ -135,7 +147,7 @@
     const active = registry.rows.filter(row => row.id !== excludeId);
     const sameSerial = active.find(row => row.serial === serial);
     if (sameSerial) return `El SERIAL ${serial} ya está registrado en Lote ${sameSerial.lot}, Caja ${sameSerial.box}.`;
-    if (ua !== UNKNOWN_UA) {
+    if (!isUnknownImportedUA(ua)) {
       const sameUA = active.find(row => row.ua === ua);
       if (sameUA) return `El UA ${ua} ya está registrado con el Serial ${sameUA.serial}.`;
     }
@@ -450,7 +462,7 @@
     records.forEach(source => {
       const lot = validateLot(source.lot);
       const serial = validateSerial(source.serial);
-      const ua = validateUA(source.ua);
+      const ua = validateImportedUA(source.ua);
       const box = validateBox(source.box);
       if (![lot, serial, ua, box].every(item => item.valid)) { invalid++; return; }
       if (duplicateCheck(serial.value, ua.value)) { duplicates++; return; }

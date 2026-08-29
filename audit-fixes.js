@@ -110,7 +110,7 @@
   function loadEquipmentImportContext() {
     if (window.EquipmentImportContext || document.querySelector('script[data-equipment-import-context]')) return;
     const script = document.createElement('script');
-    script.src = 'equipment-import-context.js?v=1f7237f';
+    script.src = 'equipment-import-context.js?v=legacy64-20260829b';
     script.dataset.equipmentImportContext = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-import-context.js');

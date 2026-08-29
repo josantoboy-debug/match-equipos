@@ -240,7 +240,7 @@
     const context = {
       ...rowContext,
       process: norm(fileContext?.process) || norm(rowContext.process),
-      quantity: normalizeQuantity(fileContext?.quantity) || normalizeQuantity(rowContext.quantity) || Math.min(MAX_PER_BOX, Math.max(1, rowContext.count))
+      quantity: normalizeQuantity(fileContext?.quantity) || normalizeQuantity(rowContext.quantity) || MAX_PER_BOX
     };
 
     if (fileContext?.lot && fileContext?.box) {
@@ -249,7 +249,7 @@
         context.lot = fileContext.lot;
         context.box = fileContext.box;
         context.count = matching.length;
-        context.quantity = normalizeQuantity(fileContext.quantity) || Math.min(MAX_PER_BOX, Math.max(1, matching.length));
+        context.quantity = normalizeQuantity(fileContext.quantity) || MAX_PER_BOX;
       }
     }
 
