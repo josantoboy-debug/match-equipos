@@ -1,0 +1,109 @@
+name: Restore UA 16-digit validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/restore-ua16.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore UA 16-digit rule everywhere
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          # equipment-input-lock.js
+          p = Path('equipment-input-lock.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("if (normalized.length !== 18) return {valid:false, value:normalized, message:`La UA debe ser 0000 + 14 dígitos (18 en total); tiene ${normalized.length}.`};", "if (normalized.length !== 16) return {valid:false, value:normalized, message:`La UA debe ser 0000 + 12 dígitos (16 en total); tiene ${normalized.length}.`};")
+          s = s.replace("if (!/^0000\\d{14}$/.test(normalized)) return {valid:false, value:normalized, message:'La UA debe cumplir exactamente el formato 0000 + 14 dígitos.'};", "if (!/^0000\\d{12}$/.test(normalized)) return {valid:false, value:normalized, message:'La UA debe cumplir exactamente el formato 0000 + 12 dígitos.'};")
+          s = s.replace("ua.maxLength = 18;", "ua.maxLength = 16;")
+          s = s.replace("ua.title = 'Formato: 0000 + 14 dígitos (18 dígitos en total).';", "ua.title = 'Formato: 0000 + 12 dígitos (16 dígitos en total).';")
+          s = s.replace(".slice(0, 18);", ".slice(0, 16);")
+          p.write_text(s, encoding='utf-8')
+
+          # equipment-register.js
+          p = Path('equipment-register.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("const UNKNOWN_UA = '000000000000000000';", "const UNKNOWN_UA = '0000000000000000';")
+          s = s.replace("const isUnknownImportedUA = value => /^(?:0{16}|0{18})$/.test(String(value || ''));", "const isUnknownImportedUA = value => /^0{16}$/.test(String(value || ''));")
+          s = s.replace("if (normalized.length !== 18) return {valid:false, value:normalized, message:`El UA / Unit Address debe ser 0000 + 14 dígitos (18 en total); tiene ${normalized.length}.`};", "if (normalized.length !== 16) return {valid:false, value:normalized, message:`El UA / Unit Address debe ser 0000 + 12 dígitos (16 en total); tiene ${normalized.length}.`};")
+          s = s.replace("if (!/^0000\\d{14}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address debe cumplir exactamente 0000 + 14 dígitos.'};", "if (!/^0000\\d{12}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address debe cumplir exactamente 0000 + 12 dígitos.'};")
+          # Imported records now follow the same 16-digit rule.
+          s = s.replace("// Compatibilidad de carga: los registros históricos exportados por la app pueden tener UA de 16 dígitos.\n  // La captura nueva conserva validateUA() con la regla actual de 18 dígitos.\n", "// Carga y captura usan la misma regla: 0000 + 12 dígitos (16 total).\n")
+          s = s.replace("if (!/^0000(?:\\d{12}|\\d{14})$/.test(normalized)) return {valid:false, value:normalized, message:'El UA importado debe tener 16 o 18 dígitos e iniciar con 0000.'};", "if (!/^0000\\d{12}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA importado debe tener 16 dígitos e iniciar con 0000.'};")
+          p.write_text(s, encoding='utf-8')
+
+          # equipment-auto-focus.js
+          p = Path('equipment-auto-focus.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("return /^0000\\d{14}$/.test(value);", "return /^0000\\d{12}$/.test(value);")
+          p.write_text(s, encoding='utf-8')
+
+          # equipment-access-import.js
+          p = Path('equipment-access-import.js')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace("const UNKNOWN_UA = '000000000000000000';", "const UNKNOWN_UA = '0000000000000000';")
+          s = s.replace("return /^\\d{1,18}$/.test(text) ? text.padStart(18, '0') : text;", "return /^\\d{1,16}$/.test(text) ? text.padStart(16, '0') : text;")
+          s = s.replace("if (/^\\d{1,18}$/.test(raw)) return raw.padStart(18, '0');", "if (/^\\d{1,16}$/.test(raw)) return raw.padStart(16, '0');")
+          s = s.replace("return /^0000\\d{14}$/.test(ua);", "return /^0000\\d{12}$/.test(ua);")
+          p.write_text(s, encoding='utf-8')
+
+          # index.html: visible rule + cache-busting versions
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('UA / UNIT ADDRESS <small>0000 + 14 dígitos · 18 total</small>', 'UA / UNIT ADDRESS <small>0000 + 12 dígitos · 16 total</small>')
+          s = s.replace('maxlength="18" placeholder="000000000000000000"', 'maxlength="16" placeholder="0000000000000000"')
+          replacements = {
+            r'equipment-register\.js\?v=[A-Za-z0-9._-]+': 'equipment-register.js?v=ua16-20260829',
+            r'equipment-access-import\.js\?v=[A-Za-z0-9._-]+': 'equipment-access-import.js?v=ua16-20260829',
+            r'equipment-auto-focus\.js\?v=[A-Za-z0-9._-]+': 'equipment-auto-focus.js?v=ua16-20260829',
+            r'equipment-input-lock\.js\?v=[A-Za-z0-9._-]+': 'equipment-input-lock.js?v=ua16-20260829',
+          }
+          for pattern, replacement in replacements.items():
+              s, count = re.subn(pattern, replacement, s, count=1)
+              if count != 1 and replacement not in s:
+                  raise SystemExit(f'No se pudo actualizar versión: {replacement}')
+          p.write_text(s, encoding='utf-8')
+
+      - name: Verify restored UA rule
+        shell: bash
+        run: |
+          node --check equipment-input-lock.js
+          node --check equipment-register.js
+          node --check equipment-auto-focus.js
+          node --check equipment-access-import.js
+          grep -F "0000 + 12 dígitos" equipment-input-lock.js
+          grep -F "0000 + 12 dígitos" equipment-register.js
+          grep -F "0000 + 12 dígitos · 16 total" index.html
+          grep -F 'maxlength="16" placeholder="0000000000000000"' index.html
+          grep -F 'return /^0000\d{12}$/.test(value);' equipment-auto-focus.js
+          grep -F 'return /^0000\d{12}$/.test(ua);' equipment-access-import.js
+          if grep -E '0000 \+ 14 dígitos|length !== 18|\\d\{14\}' equipment-input-lock.js equipment-register.js equipment-auto-focus.js equipment-access-import.js index.html; then
+            echo 'Quedó una regla UA de 18 dígitos activa'
+            exit 1
+          fi
+
+      - name: Commit verified UA restoration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add equipment-input-lock.js equipment-register.js equipment-auto-focus.js equipment-access-import.js index.html
+          if git diff --cached --quiet; then
+            echo "UA 16-digit rule already restored"
+            exit 0
+          fi
+          git commit -m "Restore UA validation to 16 digits"
+          git push
