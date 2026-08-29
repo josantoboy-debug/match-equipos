@@ -27,7 +27,7 @@
     toast.className = `toast show ${tone}`;
     toast.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(message)}</span>`;
     clearTimeout(showToast.timer);
-    showToast.timer = setTimeout(() => toast.classList.remove('show'), 4400);
+    showToast.timer = setTimeout(() => toast.classList.remove('show'), 4200);
   }
 
   function getRows() {
@@ -35,11 +35,15 @@
     return Array.isArray(rows) ? rows : [];
   }
 
-  function targetQuantity() {
+  function quantity() {
     const raw = String($('#equipmentQuantity')?.value || '').trim();
-    const parsed = /^\d+$/.test(raw) ? Number(raw) : MAX_PER_BOX;
-    if (!Number.isSafeInteger(parsed) || parsed < 1) return MAX_PER_BOX;
-    return Math.min(parsed, MAX_PER_BOX);
+    if (!/^\d+$/.test(raw)) return 0;
+    const n = Number(raw);
+    return Number.isSafeInteger(n) && n >= 1 && n <= MAX_PER_BOX ? n : 0;
+  }
+
+  function boxKey(lot, box, cap) {
+    return `${upper(lot)}\u0000${upper(box)}\u0000${cap}`;
   }
 
   function rowsInBox(lot, box) {
@@ -68,6 +72,17 @@
     try { localStorage.setItem(operatorStorageKey(), printMode()); } catch {}
   }
 
+  function restoreMode() {
+    const select = $('#equipmentPrintMode');
+    if (!select) return;
+    try {
+      select.value = localStorage.getItem(operatorStorageKey()) === 'automatic' ? 'automatic' : 'manual';
+    } catch {
+      select.value = 'manual';
+    }
+    updateControls();
+  }
+
   function processForBox(boxRows) {
     const values = [...new Set(boxRows.map(row => norm(row.process)).filter(Boolean))];
     if (values.length) return values.join(' / ');
@@ -83,19 +98,13 @@
     return Number.isNaN(date.getTime()) ? new Date() : date;
   }
 
-  function completionKey(lot, box, cap, boxRows) {
-    const last = boxRows.at(-1);
-    const token = norm(last?.id || last?.serial || last?.at || boxRows.length);
-    return `${upper(lot)}\u0000${upper(box)}\u0000${cap}\u0000${upper(token)}`;
-  }
-
-  function buildCompletedSnapshot(lot, box, cap = targetQuantity(), mode = printMode()) {
-    if (!norm(lot) || !norm(box) || !cap) return null;
+  function buildSnapshot(lot, box, cap, mode = printMode()) {
+    if (!lot || !box || !cap) return null;
     const boxRows = rowsInBox(lot, box);
     if (boxRows.length < cap) return null;
     const completedAt = completionDate(boxRows);
     return {
-      key: completionKey(lot, box, cap, boxRows),
+      key: boxKey(lot, box, cap),
       lot: norm(lot),
       box: norm(box),
       count: boxRows.length,
@@ -107,27 +116,17 @@
     };
   }
 
-  function buildManualSnapshot() {
+  function currentReadySnapshot() {
+    const cap = quantity();
     const lot = norm($('#equipmentLot')?.value);
     const box = norm($('#equipmentBox')?.value);
-    const cap = targetQuantity();
-    const boxRows = rowsInBox(lot, box);
-    const now = new Date();
-    return {
-      key: completionKey(lot || 'MANUAL', box || 'SIN-CAJA', cap, boxRows),
-      lot,
-      box,
-      count: boxRows.length,
-      capacity: cap,
-      process: processForBox(boxRows),
-      operator: operatorName(),
-      printMode: 'manual',
-      completedAt: now.toISOString()
-    };
+    if (!cap || !lot || !box) return null;
+    return buildSnapshot(lot, box, cap, printMode());
   }
 
   function findLatestCompleteBox() {
-    const cap = targetQuantity();
+    const cap = quantity();
+    if (!cap) return null;
     const groups = new Map();
     getRows().forEach(row => {
       const key = `${upper(row.lot)}\u0000${upper(row.box)}`;
@@ -138,20 +137,11 @@
     let best = null;
     groups.forEach(group => {
       if (group.length < cap) return;
-      const snapshot = buildCompletedSnapshot(group[0]?.lot, group[0]?.box, cap);
+      const snapshot = buildSnapshot(group[0]?.lot, group[0]?.box, cap);
       if (!snapshot) return;
       if (!best || new Date(snapshot.completedAt).getTime() > new Date(best.completedAt).getTime()) best = snapshot;
     });
     return best;
-  }
-
-  function updateModeLabels() {
-    const select = $('#equipmentPrintMode');
-    if (!select) return;
-    const manual = select.querySelector('option[value="manual"]');
-    const automatic = select.querySelector('option[value="automatic"]');
-    if (manual) manual.textContent = 'Manual · imprimir con botón';
-    if (automatic) automatic.textContent = `Automática · al completar ${targetQuantity()}`;
   }
 
   function updateControls() {
@@ -159,29 +149,24 @@
     const select = $('#equipmentPrintMode');
     if (!button || !select) return;
 
-    updateModeLabels();
-    if (!lastCompleted) lastCompleted = findLatestCompleteBox();
+    const cap = quantity();
+    const current = currentReadySnapshot();
+    const ready = current || lastCompleted || findLatestCompleteBox();
+    if (ready) lastCompleted = ready;
 
-    // El botón queda disponible para impresión manual o reimpresión en ambos modos.
-    button.disabled = false;
-    const currentBox = norm($('#equipmentBox')?.value);
-    const printableBox = currentBox || lastCompleted?.box || '';
-    button.textContent = printableBox ? `Imprimir caja ${printableBox}` : 'Imprimir caja';
-    button.title = printMode() === 'automatic'
-      ? `Automático: imprime al llegar a ${targetQuantity()} equipos. Este botón permite reimpresión manual.`
-      : 'Manual: no imprime automáticamente; usa este botón cuando quieras imprimir.';
-    select.title = `Modo de impresión: ${modeLabel()}`;
-  }
+    button.disabled = !cap || !ready;
+    button.textContent = ready?.box ? `Imprimir caja ${ready.box}` : 'Imprimir caja';
+    button.title = !cap
+      ? `Asigna una CANTIDAD entre 1 y ${MAX_PER_BOX}.`
+      : ready
+        ? `Caja ${ready.box}: ${ready.count}/${cap}. Lista para impresión manual.`
+        : `Se habilita cuando la caja alcance ${cap}/${cap} equipos.`;
 
-  function restoreMode() {
-    const select = $('#equipmentPrintMode');
-    if (!select) return;
-    try {
-      select.value = localStorage.getItem(operatorStorageKey()) === 'automatic' ? 'automatic' : 'manual';
-    } catch {
-      select.value = 'manual';
-    }
-    updateControls();
+    const optionAuto = select.querySelector('option[value="automatic"]');
+    const optionManual = select.querySelector('option[value="manual"]');
+    if (optionAuto) optionAuto.textContent = cap ? `Automática · al completar ${cap}` : 'Automática · según CANTIDAD';
+    if (optionManual) optionManual.textContent = cap ? `Manual · habilitar al ${cap}/${cap}` : 'Manual · según CANTIDAD';
+    select.title = `Modo de impresión: ${modeLabel()} · depende de CANTIDAD asignada.`;
   }
 
   function printHtml(data) {
@@ -232,7 +217,12 @@
   }
 
   function openPrint(data, source = 'manual') {
-    const printable = data || buildManualSnapshot();
+    if (!data) {
+      const cap = quantity();
+      showToast('Caja todavía no lista', cap ? `Completa ${cap}/${cap} equipos antes de imprimir.` : 'Asigna primero la CANTIDAD de equipos.', 'warn');
+      return false;
+    }
+
     const iframe = document.createElement('iframe');
     iframe.setAttribute('aria-hidden', 'true');
     iframe.style.position = 'fixed';
@@ -252,7 +242,7 @@
     }
 
     doc.open();
-    doc.write(printHtml(printable));
+    doc.write(printHtml(data));
     doc.close();
 
     const cleanup = () => setTimeout(() => iframe.remove(), 300);
@@ -262,10 +252,10 @@
         try {
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
-          if (source === 'automatic') autoPrinted.add(printable.key);
+          if (source === 'automatic') autoPrinted.add(data.key);
         } catch (error) {
           console.error('[equipment-box-print]', error);
-          showToast('Impresión automática bloqueada', 'El navegador no permitió abrir impresión automáticamente. Usa Imprimir caja.', 'warn');
+          showToast('Impresión bloqueada', 'Usa el botón Imprimir caja para abrirla manualmente.', 'warn');
           cleanup();
         }
       }, 120);
@@ -278,41 +268,13 @@
     }
   }
 
-  function completedFromNewest(newest) {
-    const cap = targetQuantity();
+  function completeFromNewest(newest) {
+    const cap = quantity();
     if (!newest || !cap) return null;
-    // Las importaciones/restauraciones no deben lanzar impresiones inesperadas.
     if (!/^Captura /i.test(String(newest.origin || ''))) return null;
     const boxRows = rowsInBox(newest.lot, newest.box);
     if (boxRows.length !== cap) return null;
-    return buildCompletedSnapshot(newest.lot, newest.box, cap, printMode());
-  }
-
-  function triggerAutomaticPrint(completed) {
-    if (!completed || printMode() !== 'automatic' || autoPrinted.has(completed.key)) return false;
-    autoPrinted.add(completed.key);
-    showToast(
-      'Caja completa · impresión automática',
-      `Caja ${completed.box}: ${completed.count}/${completed.capacity} equipos. Abriendo tiquete automáticamente.`,
-      'ok'
-    );
-    const opened = openPrint({...completed, printMode:'automatic'}, 'automatic');
-    if (!opened) autoPrinted.delete(completed.key);
-    return opened;
-  }
-
-  function checkCurrentBoxOnModeChange() {
-    if (printMode() !== 'automatic') return;
-    const lot = norm($('#equipmentLot')?.value);
-    const box = norm($('#equipmentBox')?.value);
-    if (!lot || !box) return;
-    const rows = rowsInBox(lot, box);
-    if (rows.length !== targetQuantity()) return;
-    const completed = buildCompletedSnapshot(lot, box, targetQuantity(), 'automatic');
-    if (completed) {
-      lastCompleted = completed;
-      triggerAutomaticPrint(completed);
-    }
+    return buildSnapshot(newest.lot, newest.box, cap, printMode());
   }
 
   function afterRegistryChanged() {
@@ -331,21 +293,18 @@
         }
 
         if (rows.length > previous) {
-          const newest = rows.at(-1);
-          const completed = completedFromNewest(newest);
+          const newest = rows[rows.length - 1];
+          const completed = completeFromNewest(newest);
           if (completed) {
             lastCompleted = completed;
+            updateControls();
             document.dispatchEvent(new CustomEvent('equipment:box-complete', {detail:{...completed}}));
 
-            if (printMode() === 'automatic') {
-              triggerAutomaticPrint(completed);
+            if (printMode() === 'automatic' && !autoPrinted.has(completed.key)) {
+              showToast('Cantidad completada', `Caja ${completed.box}: ${completed.count}/${completed.capacity}. Abriendo impresión automática.`, 'ok');
+              openPrint({...completed, printMode:'automatic'}, 'automatic');
             } else {
-              // MODO MANUAL: jamás se imprime solo.
-              showToast(
-                'Caja completa',
-                `Caja ${completed.box}: ${completed.count}/${completed.capacity} equipos. Pulsa Imprimir caja cuando quieras.`,
-                'ok'
-              );
+              showToast('Caja lista para imprimir', `Caja ${completed.box}: ${completed.count}/${completed.capacity}. Pulsa Imprimir caja.`, 'ok');
             }
           }
         }
@@ -361,7 +320,7 @@
     const style = document.createElement('style');
     style.id = 'equipmentBoxPrintStyles';
     style.textContent = `
-      #equipmentPrintMode{min-width:205px}
+      #equipmentPrintMode{min-width:175px}
       #equipmentPrintBtn{white-space:nowrap}
       #equipmentPrintBtn:disabled{opacity:.48;cursor:not-allowed}
       @media(max-width:900px){#equipmentPrintMode,#equipmentPrintBtn{width:100%}}
@@ -379,29 +338,32 @@
     }
 
     installStyles();
-    updateModeLabels();
     restoreMode();
     lastRowCount = getRows().length;
 
     select.addEventListener('change', () => {
       saveMode();
       updateControls();
-      if (printMode() === 'automatic') {
-        showToast('Impresión automática activada', `El tiquete se abrirá automáticamente al llegar a ${targetQuantity()} equipos.`, 'ok');
-        setTimeout(checkCurrentBoxOnModeChange, 0);
-      } else {
-        showToast('Impresión manual activada', 'Nada se imprimirá solo. Usa Imprimir caja cuando quieras.', 'ok');
-      }
+      const cap = quantity();
+      showToast('Modo de impresión', cap
+        ? `${modeLabel()} · se considera completa al llegar a ${cap}/${cap}.`
+        : `${modeLabel()} · asigna primero la CANTIDAD.`, 'ok');
     });
 
     button.addEventListener('click', () => {
-      // Siempre es una acción manual/reimpresión: imprime el contexto actual,
-      // aunque haya campos vacíos o la caja no esté completa.
-      openPrint(buildManualSnapshot(), 'manual');
+      const data = currentReadySnapshot() || lastCompleted || findLatestCompleteBox();
+      if (!data) {
+        openPrint(null, 'manual');
+        return;
+      }
+      openPrint({...data, printMode:'manual', operator:operatorName()}, 'manual');
     });
 
     ['#equipmentQuantity', '#equipmentLot', '#equipmentBox', '#equipmentProcess'].forEach(selector => {
-      $(selector)?.addEventListener('input', updateControls);
+      $(selector)?.addEventListener('input', () => {
+        lastCompleted = currentReadySnapshot() || findLatestCompleteBox();
+        updateControls();
+      });
     });
 
     document.addEventListener('operator:login', restoreMode);
@@ -413,17 +375,15 @@
 
     updateControls();
     window.EquipmentBoxPrint = {
-      printLast: () => openPrint(buildManualSnapshot(), 'manual'),
+      printLast: () => openPrint(currentReadySnapshot() || lastCompleted || findLatestCompleteBox(), 'manual'),
       getLastCompleted: () => lastCompleted ? {...lastCompleted} : null,
       getMode: printMode,
       setMode: mode => {
         select.value = mode === 'automatic' ? 'automatic' : 'manual';
         saveMode();
         updateControls();
-        if (select.value === 'automatic') setTimeout(checkCurrentBoxOnModeChange, 0);
       },
-      buildManualSnapshot,
-      checkCurrentBoxOnModeChange
+      refresh: updateControls
     };
   }
 
