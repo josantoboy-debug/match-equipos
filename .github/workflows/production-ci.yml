@@ -1,0 +1,50 @@
+name: Production CI
+
+on:
+  push:
+    branches: [production/supabase-v1]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: JavaScript syntax
+        run: |
+          set -euo pipefail
+          for f in *.js tests/*.cjs; do node --check "$f"; done
+      - name: Security and cloud-session checks
+        run: |
+          set -euo pipefail
+          grep -F 'sb_publishable_' config.js
+          ! grep -R -E 'service_role|SUPABASE_SERVICE_ROLE_KEY|sb_secret_' --include='*.js' --include='*.html' --include='*.json' .
+          ! grep -F 'matchEquipos.operatorAccess.v1' operator-session.js
+          grep -F 'production-core.js' operator-session.js
+          grep -F "appVersion: '1.0.0'" config.js
+      - name: Critical operational modules remain present
+        run: |
+          for f in app.js equipment-register.js equipment-process.js equipment-capacity.js equipment-entry-flow.js equipment-access-import.js equipment-auto-focus.js equipment-input-lock.js equipment-box-print.js registry-export.js unified-export.js export-summary.js voice-notifications.js; do test -f "$f"; done
+          grep -F 'equipment-register.js' index.html
+          grep -F 'equipment-box-print.js' index.html
+          grep -F 'voice-notifications.js' index.html
+      - name: PWA structure
+        run: |
+          node -e "const fs=require('fs');const m=JSON.parse(fs.readFileSync('manifest.json'));if(m.display!=='standalone'||!m.icons?.length)process.exit(1)"
+          test -f service-worker.js
+          test -f icon.svg
+          grep -F "const VERSION='1.0.0'" service-worker.js
+      - name: Install browser test dependency
+        run: npm install --no-save puppeteer-core@24.16.0
+      - name: Start application
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/match-http.log 2>&1 &
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0; sleep 1; done
+          cat /tmp/match-http.log; exit 1
+      - name: Chromium desktop tablet mobile smoke tests
+        run: node tests/production-smoke.cjs
