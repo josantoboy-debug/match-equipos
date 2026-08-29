@@ -134,19 +134,19 @@
     <div class="equipment-entry-grid">
       <label><span>LOTE <small>Solo letras y números</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE001" inputmode="text"></label>
       <label><span>CAJA <small>Secuencial</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="1"></label>
-      <label class="equipment-quantity-field"><span>CANTIDAD <small>Asignada · máximo 64</small></span><input id="equipmentQuantity" class="equipment-code" type="number" min="1" max="64" step="1" inputmode="numeric" autocomplete="off" placeholder="1–64" aria-label="Cantidad de equipos asignados a la caja"></label>
+      <label class="equipment-quantity-field"><span>CANTIDAD <small>Límite de la caja · máximo 64</small></span><input id="equipmentQuantity" class="equipment-code" type="number" min="1" max="64" step="1" inputmode="numeric" autocomplete="off" placeholder="1–64" aria-label="Cantidad de equipos asignados a la caja"></label>
       <label><span>SERIAL <small>12 caracteres · inicia M</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
       <label><span>UA / UNIT ADDRESS <small>16 ceros = UA desconocida</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" placeholder="0000000000000000"></label>
       <button id="equipmentAddBtn" class="primary equipment-add-btn" type="button">Agregar equipo</button>
     </div>
 
-    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD asignada (1–64). Luego registra SERIAL y UA.</small></div></div>
+    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD asignada (1–64). La CANTIDAD será el límite real de esa caja.</small></div></div>
 
     <div class="equipment-register-summary">
       <div><span>Total registrados</span><strong id="equipmentTotalCount">0</strong></div>
       <div><span>Lotes</span><strong id="equipmentLotCount">0</strong></div>
       <div><span>Cajas</span><strong id="equipmentBoxCount">0</strong></div>
-      <div><span>Caja actual / cantidad asignada</span><strong id="equipmentCurrentBoxCount">0 / —</strong><small id="equipmentCurrentBoxLabel">Sin caja seleccionada</small></div>
+      <div><span>Caja actual / límite asignado</span><strong id="equipmentCurrentBoxCount">0 / —</strong><small id="equipmentCurrentBoxLabel">Sin caja seleccionada</small></div>
     </div>
 
     <div class="equipment-table-wrap">
@@ -197,7 +197,7 @@
 <script src="matches-export.js"></script>
 <script src="equipment-register.js?v=1bfa15d"></script>
 <script src="equipment-process.js?v=bcc805e"></script>
-<script src="equipment-capacity.js?v=a8947a5"></script>
+<script src="equipment-capacity.js?v=df7b530"></script>
 <script src="equipment-entry-flow.js?v=4ced8a8"></script>
 <script src="equipment-access-import.js?v=e19adec"></script>
 <script src="equipment-auto-focus.js?v=958d18d"></script>
