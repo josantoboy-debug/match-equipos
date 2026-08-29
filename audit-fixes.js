@@ -32,13 +32,13 @@
     if (!document.querySelector('link[data-tts-control]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = 'tts-control.css?v=e017d48';
+      link.href = 'tts-control.css?v=8c72993';
       link.dataset.ttsControl = '1';
       document.head.appendChild(link);
     }
     if (window.AppTTS || document.querySelector('script[data-tts-control]')) return;
     const script = document.createElement('script');
-    script.src = 'tts-control.js?v=2680422';
+    script.src = 'tts-control.js?v=3c901db';
     script.dataset.ttsControl = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-control.js');
