@@ -86,7 +86,7 @@
   function uaValid() {
     const input = $('#equipmentUA');
     const value = normalizeUA(input?.value);
-    return /^0000\d{12}$/.test(value);
+    return /^0000\d{14}$/.test(value);
   }
 
   function captureMode() {
@@ -171,7 +171,7 @@
         return;
       }
       if (!uaValid()) {
-        setMessage('error', 'UA no confirmado', 'El UA / Unit Address debe tener 16 dígitos e iniciar con 0000.');
+        setMessage('error', 'UA no confirmado', 'La UA debe ser 0000 + 14 dígitos (18 dígitos en total).');
         focusField('#equipmentUA');
         return;
       }
