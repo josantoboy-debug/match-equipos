@@ -2,6 +2,7 @@
   'use strict';
 
   const $ = selector => document.querySelector(selector);
+  const MAX_PER_BOX = 64;
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
@@ -33,13 +34,14 @@
 
   function guardQuantity() {
     const input = $('#equipmentQuantity');
-    if (!input || input.dataset.auditGuarded === '1') return;
+    if (!input) return;
+    input.value = String(MAX_PER_BOX);
+    input.setAttribute('value', String(MAX_PER_BOX));
+    input.classList.remove('field-invalid');
+    if (input.dataset.auditGuarded === '1') return;
     input.dataset.auditGuarded = '1';
     input.addEventListener('input', event => {
-      const raw = String(event.target.value || '').replace(/\D/g, '');
-      if (!raw) return;
-      const safe = Math.min(100000, Math.max(1, Number(raw)));
-      event.target.value = String(safe);
+      event.target.value = String(MAX_PER_BOX);
     }, true);
   }
 
@@ -59,7 +61,7 @@
       return;
     }
     const script = document.createElement('script');
-    script.src = 'equipment-new-session.js?v=709a1fc';
+    script.src = 'equipment-new-session.js?v=3dfc989';
     script.dataset.equipmentNewSession = '1';
     script.async = false;
     script.onload = () => window.EquipmentNewSession?.install?.();
@@ -109,6 +111,7 @@
 
   document.addEventListener('operator:login', () => {
     restoreNativeAnchorClick();
+    guardQuantity();
     loadExportSummary();
     loadEquipmentNewSession();
     loadEquipmentProcessHistory();
@@ -120,6 +123,7 @@
     healthCheck,
     loadExportSummary,
     loadEquipmentNewSession,
-    loadEquipmentProcessHistory
+    loadEquipmentProcessHistory,
+    guardQuantity
   };
 })();
