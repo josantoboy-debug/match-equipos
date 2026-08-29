@@ -1,0 +1,64 @@
+name: Integrate production Supabase runtime
+
+on:
+  push:
+    branches: [production/supabase-v1]
+    paths:
+      - '.github/workflows/production-index-integration.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch production runtime into index
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          if 'manifest.json?v=1.0.0' not in s:
+              s=s.replace('<title>REGISTRO Y VERIFICACION</title>', '<title>REGISTRO Y VERIFICACION</title>\n  <link rel="manifest" href="manifest.json?v=1.0.0">\n  <link rel="icon" href="icon.svg?v=1.0.0" type="image/svg+xml">', 1)
+          s=s.replace('Los datos de cada operador se conservan localmente en este navegador. Exporta también tus respaldos antes de cambiar de equipo o limpiar los datos del navegador.', 'Supabase es la fuente central. El navegador conserva caché y cambios pendientes para continuar trabajando temporalmente sin conexión.')
+          old='<div class="footer-meta"><span>© 2026 — Todos los derechos reservados.</span><span aria-hidden="true">·</span><button type="button" class="credits-link" id="creditsBtn">Créditos</button></div>'
+          new='<div class="footer-meta"><span>© 2026 — Todos los derechos reservados.</span><span aria-hidden="true">·</span><span>v1.0.0</span><span aria-hidden="true">·</span><button type="button" class="credits-link" id="creditsBtn">Créditos</button></div>'
+          s=s.replace(old,new,1)
+          s=s.replace('Proyecto desarrollado conjuntamente — 2026</p>', 'Proyecto desarrollado conjuntamente — 2026 · Versión 1.0.0</p>', 1)
+          marker='<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>'
+          runtime='''<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4"></script>\n<script src="config.js?v=1.0.0"></script>\n<script src="production-core.js?v=1.0.0"></script>\n<script src="cloud-session.js?v=1.0.0"></script>'''
+          if 'production-core.js?v=1.0.0' not in s:
+              if marker not in s: raise SystemExit('SheetJS marker missing')
+              s=s.replace(marker, marker+'\n'+runtime,1)
+          old_local='<script src="operator-session.js"></script>\n<script src="operator-lock.js"></script>'
+          if old_local in s:
+              s=s.replace(old_local, '<!-- Legacy local operator modules retained in repository but disabled in production. -->',1)
+          voice='<script src="voice-notifications.js?v=welcome-20260829"></script>'
+          if '<script src="app-integration.js?v=1.0.0"></script>' not in s:
+              if voice not in s: raise SystemExit('Voice marker missing')
+              s=s.replace(voice, '<script src="app-integration.js?v=1.0.0"></script>\n'+voice,1)
+          p.write_text(s,encoding='utf-8')
+      - name: Verify critical production invariants
+        run: |
+          grep -F 'production-core.js?v=1.0.0' index.html
+          grep -F 'cloud-session.js?v=1.0.0' index.html
+          grep -F 'app-integration.js?v=1.0.0' index.html
+          grep -F 'voice-notifications.js?v=welcome-20260829' index.html
+          ! grep -F '<script src="operator-session.js"></script>' index.html
+          ! grep -F '<script src="operator-lock.js"></script>' index.html
+          grep -F 'equipment-box-print.js' index.html
+          grep -F 'equipment-register.js' index.html
+          grep -F 'v1.0.0' index.html
+          for f in *.js; do node --check "$f"; done
+      - name: Commit verified index integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Load production Supabase runtime without changing operational UI"
+          git push
