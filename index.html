@@ -24,6 +24,19 @@
       }
     }
   </style>
+  <style id="coauthor-credits-styles">
+    .app-footer{max-width:1780px;margin:0 auto;padding:0 22px 22px;color:var(--muted,#94a3b8);text-align:center;font-size:10px;line-height:1.6}
+    .app-footer-inner{padding-top:15px;border-top:1px solid var(--line,#263247)}
+    .app-footer .footer-authors{color:var(--text,#edf3fb);font-weight:600}
+    .app-footer .footer-authors strong{font-weight:750}
+    .app-footer .footer-meta{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;margin-top:2px}
+    .credits-link{border:0;background:transparent;color:var(--blue,#4f8cff);padding:1px 4px;font:inherit;font-weight:750;text-decoration:underline;text-underline-offset:2px}
+    .credits-link:hover{color:#8ab2ff}
+    .credits-people{display:grid;gap:7px;margin:4px 0 16px;text-align:center;font-size:14px;font-weight:750}
+    .credits-joint{text-align:center;color:var(--muted,#94a3b8);font-size:10px;margin:0}
+    @media(max-width:900px){.app-footer{padding:0 12px 18px;font-size:9.5px}}
+    @media print{.app-footer,#creditsModal{display:none!important}}
+  </style>
 </head>
 <body>
 <header class="topbar">
@@ -158,6 +171,15 @@
   <p class="footnote">Los datos de cada operador se conservan localmente en este navegador. Exporta también tus respaldos antes de cambiar de equipo o limpiar los datos del navegador.</p>
 </main>
 
+<footer class="app-footer" aria-label="Créditos de desarrollo">
+  <div class="app-footer-inner">
+    <div class="footer-authors">Desarrollado por <strong>Josue Parfait</strong> &amp; <strong>Marcos Rodríguez</strong></div>
+    <div class="footer-meta"><span>© 2026 — Todos los derechos reservados.</span><span aria-hidden="true">·</span><button type="button" class="credits-link" id="creditsBtn">Créditos</button></div>
+  </div>
+</footer>
+
+<div id="creditsModal" class="modal"><div class="modal-card small"><div class="modal-head"><h2>Co-creadores y desarrolladores</h2><button type="button" data-close="creditsModal" aria-label="Cerrar créditos">×</button></div><div class="modal-body"><div class="credits-people"><span>Josue Parfait</span><span>Marcos Rodríguez</span></div><p class="credits-joint">Proyecto desarrollado conjuntamente — 2026</p></div><div class="modal-foot"><button type="button" class="secondary" data-close="creditsModal">Cerrar</button></div></div></div>
+
 <div id="editModal" class="modal"><div class="modal-card small"><div class="modal-head"><h2>Corregir registro</h2><button data-close="editModal">×</button></div><div class="modal-body edit-grid"><input id="editId" type="hidden"><label>Tipo<select id="editType"><option>Carcasa</option><option>Equipo</option></select></label><label>Host SN<input id="editHost" class="code"></label><label>UA<input id="editUA" class="code"></label></div><div class="modal-foot"><button class="secondary" data-close="editModal">Cancelar</button><button id="saveEdit" class="primary">Guardar corrección</button></div></div></div>
 
 <div id="importModal" class="modal"><div class="modal-card"><div class="modal-head"><h2>Importar Excel</h2><button data-close="importModal">×</button></div><div class="modal-body"><div id="importSummary" class="import-summary"></div><div id="importBlocks"></div></div><div class="modal-foot"><button class="secondary" data-close="importModal">Cancelar</button><button id="runImport" class="primary">Importar y procesar</button></div></div></div>
@@ -179,5 +201,16 @@
 <script src="equipment-entry-flow.js"></script>
 <script src="unified-export.js?v=870f693"></script>
 <script src="export-summary.js?v=1a4c24c"></script>
+<script>
+  (()=>{
+    const btn=document.getElementById('creditsBtn');
+    const modal=document.getElementById('creditsModal');
+    if(!btn||!modal)return;
+    btn.addEventListener('click',()=>modal.classList.add('open'));
+    modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('open');});
+    modal.querySelectorAll('[data-close="creditsModal"]').forEach(el=>el.addEventListener('click',()=>modal.classList.remove('open')));
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')modal.classList.remove('open');});
+  })();
+</script>
 </body>
 </html>
