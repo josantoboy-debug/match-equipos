@@ -20,7 +20,7 @@
 
   const normSerial = value => String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
   const normUA = value => String(value ?? '').trim().replace(/[-\s]/g, '');
-  const UNKNOWN_UA = '0000000000000000';
+  const UNKNOWN_UA = '000000000000000000';
   const normText = value => String(value ?? '').trim();
   const fmt = value => new Date(value).toLocaleString('es-PA');
 
@@ -33,8 +33,8 @@
     const normalized = normSerial(value);
     if (!normalized) return {valid:false, value:normalized, message:'El SERIAL es obligatorio.'};
     if (!normalized.startsWith('M')) return {valid:false, value:normalized, message:'El SERIAL debe iniciar únicamente con M.'};
-    if (normalized.length !== 12) return {valid:false, value:normalized, message:`El SERIAL debe tener exactamente 12 caracteres; tiene ${normalized.length}.`};
-    if (!/^M[A-Z0-9]{11}$/.test(normalized)) return {valid:false, value:normalized, message:'El SERIAL solo puede contener letras y números después de M.'};
+    if (normalized.length !== 12) return {valid:false, value:normalized, message:`El SERIAL debe ser M + 11 caracteres alfanuméricos (12 en total); tiene ${normalized.length}.`};
+    if (!/^M[A-Z0-9]{11}$/.test(normalized)) return {valid:false, value:normalized, message:'Después de M solo se permiten 11 letras o números.'};
     return {valid:true, value:normalized, message:''};
   }
 
@@ -43,7 +43,8 @@
     if (!normalized) return {valid:false, value:normalized, message:'El UA / Unit Address es obligatorio.'};
     if (!/^\d+$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address solo puede contener dígitos.'};
     if (!normalized.startsWith('0000')) return {valid:false, value:normalized, message:'El UA / Unit Address debe iniciar con 0000.'};
-    if (normalized.length !== 16) return {valid:false, value:normalized, message:`El UA / Unit Address debe tener exactamente 16 dígitos; tiene ${normalized.length}.`};
+    if (normalized.length !== 18) return {valid:false, value:normalized, message:`El UA / Unit Address debe ser 0000 + 14 dígitos (18 en total); tiene ${normalized.length}.`};
+    if (!/^0000\d{14}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address debe cumplir exactamente 0000 + 14 dígitos.'};
     return {valid:true, value:normalized, message:''};
   }
 
