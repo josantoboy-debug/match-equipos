@@ -19,8 +19,8 @@
     if (!normalized) return {valid:false, value:normalized, message:'La UA / Unit Address es obligatoria.'};
     if (!/^\d+$/.test(normalized)) return {valid:false, value:normalized, message:'La UA / Unit Address solo puede contener dígitos.'};
     if (!normalized.startsWith('0000')) return {valid:false, value:normalized, message:'La UA / Unit Address debe iniciar con 0000.'};
-    if (normalized.length !== 18) return {valid:false, value:normalized, message:`La UA debe ser 0000 + 14 dígitos (18 en total); tiene ${normalized.length}.`};
-    if (!/^0000\d{14}$/.test(normalized)) return {valid:false, value:normalized, message:'La UA debe cumplir exactamente el formato 0000 + 14 dígitos.'};
+    if (normalized.length !== 16) return {valid:false, value:normalized, message:`La UA debe ser 0000 + 12 dígitos (16 en total); tiene ${normalized.length}.`};
+    if (!/^0000\d{12}$/.test(normalized)) return {valid:false, value:normalized, message:'La UA debe cumplir exactamente el formato 0000 + 12 dígitos.'};
     return {valid:true, value:normalized, message:''};
   }
 
@@ -129,11 +129,11 @@
     }
     if (ua && ua.dataset.strictStayInstalled !== '1') {
       ua.dataset.strictStayInstalled = '1';
-      ua.maxLength = 18;
+      ua.maxLength = 16;
       ua.inputMode = 'numeric';
-      ua.title = 'Formato: 0000 + 14 dígitos (18 dígitos en total).';
+      ua.title = 'Formato: 0000 + 12 dígitos (16 dígitos en total).';
       ua.addEventListener('input', () => {
-        const normalized = String(ua.value || '').replace(/\D/g, '').slice(0, 18);
+        const normalized = String(ua.value || '').replace(/\D/g, '').slice(0, 16);
         if (ua.value !== normalized) ua.value = normalized;
         const result = uaResult(ua.value);
         ua.classList.toggle('field-invalid', !!ua.value && !result.valid);

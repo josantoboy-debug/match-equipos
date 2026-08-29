@@ -27,7 +27,7 @@
 
   function validUA() {
     const value = String($('#equipmentUA')?.value || '').trim().replace(/[-\s]/g, '');
-    return /^0000\d{14}$/.test(value);
+    return /^0000\d{12}$/.test(value);
   }
 
   function readyForNextSerial() {

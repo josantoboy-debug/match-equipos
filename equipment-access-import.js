@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = selector => document.querySelector(selector);
-  const UNKNOWN_UA = '000000000000000000';
+  const UNKNOWN_UA = '0000000000000000';
   const MAX_PER_BOX = 64;
   let converting = false;
 
@@ -58,10 +58,10 @@
     if (value === null || value === undefined || String(value).trim() === '') return UNKNOWN_UA;
     if (typeof value === 'number' && Number.isFinite(value)) {
       const text = String(Math.trunc(value));
-      return /^\d{1,18}$/.test(text) ? text.padStart(18, '0') : text;
+      return /^\d{1,16}$/.test(text) ? text.padStart(16, '0') : text;
     }
     const raw = String(value).trim().replace(/[-\s]/g, '').replace(/&$/, '');
-    if (/^\d{1,18}$/.test(raw)) return raw.padStart(18, '0');
+    if (/^\d{1,16}$/.test(raw)) return raw.padStart(16, '0');
     return raw;
   }
 
@@ -75,7 +75,7 @@
 
   function validUA(value) {
     const ua = normalizeUA(value);
-    return /^0000\d{14}$/.test(ua);
+    return /^0000\d{12}$/.test(ua);
   }
 
   function currentContext() {

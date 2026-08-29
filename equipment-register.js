@@ -20,8 +20,8 @@
 
   const normSerial = value => String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
   const normUA = value => String(value ?? '').trim().replace(/[-\s]/g, '');
-  const UNKNOWN_UA = '000000000000000000';
-  const isUnknownImportedUA = value => /^(?:0{16}|0{18})$/.test(String(value || ''));
+  const UNKNOWN_UA = '0000000000000000';
+  const isUnknownImportedUA = value => /^0{16}$/.test(String(value || ''));
   const normText = value => String(value ?? '').trim();
   const fmt = value => new Date(value).toLocaleString('es-PA');
 
@@ -44,19 +44,18 @@
     if (!normalized) return {valid:false, value:normalized, message:'El UA / Unit Address es obligatorio.'};
     if (!/^\d+$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address solo puede contener dígitos.'};
     if (!normalized.startsWith('0000')) return {valid:false, value:normalized, message:'El UA / Unit Address debe iniciar con 0000.'};
-    if (normalized.length !== 18) return {valid:false, value:normalized, message:`El UA / Unit Address debe ser 0000 + 14 dígitos (18 en total); tiene ${normalized.length}.`};
-    if (!/^0000\d{14}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address debe cumplir exactamente 0000 + 14 dígitos.'};
+    if (normalized.length !== 16) return {valid:false, value:normalized, message:`El UA / Unit Address debe ser 0000 + 12 dígitos (16 en total); tiene ${normalized.length}.`};
+    if (!/^0000\d{12}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address debe cumplir exactamente 0000 + 12 dígitos.'};
     return {valid:true, value:normalized, message:''};
   }
 
-  // Compatibilidad de carga: los registros históricos exportados por la app pueden tener UA de 16 dígitos.
-  // La captura nueva conserva validateUA() con la regla actual de 18 dígitos.
+  // Carga y captura usan la misma regla: 0000 + 12 dígitos (16 total).
   function validateImportedUA(value) {
     const normalized = normUA(value);
     if (!normalized) return {valid:false, value:normalized, message:'El UA / Unit Address es obligatorio.'};
     if (!/^\d+$/.test(normalized)) return {valid:false, value:normalized, message:'El UA / Unit Address solo puede contener dígitos.'};
     if (!normalized.startsWith('0000')) return {valid:false, value:normalized, message:'El UA / Unit Address debe iniciar con 0000.'};
-    if (!/^0000(?:\d{12}|\d{14})$/.test(normalized)) return {valid:false, value:normalized, message:'El UA importado debe tener 16 o 18 dígitos e iniciar con 0000.'};
+    if (!/^0000\d{12}$/.test(normalized)) return {valid:false, value:normalized, message:'El UA importado debe tener 16 dígitos e iniciar con 0000.'};
     return {valid:true, value:normalized, message:''};
   }
 
