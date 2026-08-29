@@ -2,6 +2,7 @@
   'use strict';
 
   const $ = selector => document.querySelector(selector);
+  const MAX_PER_BOX = 64;
 
   const normalizeLot = value => String(value ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const normalizeUA = value => String(value ?? '').replace(/[-\s]/g, '');
@@ -46,28 +47,10 @@
     input.classList.remove('field-valid', 'field-invalid');
     if (!value) {
       input.classList.add('field-invalid');
-      setMessage('error', 'CAJA no confirmada', 'Ingresa la caja antes de definir la cantidad.');
+      setMessage('error', 'CAJA no confirmada', 'Ingresa la caja antes de registrar equipos.');
       input.focus();
       return false;
     }
-    input.classList.add('field-valid');
-    return true;
-  }
-
-  function quantityValid() {
-    const input = $('#equipmentQuantity');
-    if (!input) return false;
-    const raw = String(input.value || '').trim();
-    const value = Number(raw);
-    input.classList.remove('field-valid', 'field-invalid');
-    if (!/^\d+$/.test(raw) || !Number.isSafeInteger(value) || value < 1 || value > 100000) {
-      input.classList.add('field-invalid');
-      setMessage('error', 'CANTIDAD no confirmada', 'Ingresa una cantidad entera entre 1 y 100000 equipos por caja.');
-      input.focus();
-      input.select?.();
-      return false;
-    }
-    input.value = String(value);
     input.classList.add('field-valid');
     return true;
   }
@@ -96,14 +79,17 @@
     if (select) input.select?.();
   }
 
+  function currentBoxCount() {
+    return window.EquipmentCapacity?.getCurrentCount?.() || 0;
+  }
+
   function wireFlow() {
     const lot = $('#equipmentLot');
     const box = $('#equipmentBox');
-    const quantity = $('#equipmentQuantity');
     const serial = $('#equipmentSerial');
     const ua = $('#equipmentUA');
     const add = $('#equipmentAddBtn');
-    if (!lot || !box || !quantity || !serial || !ua || !add) return;
+    if (!lot || !box || !serial || !ua || !add) return;
 
     lot.placeholder = 'LOTE001';
     lot.setAttribute('inputmode', 'text');
@@ -120,27 +106,17 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!lotValid()) return;
-      setMessage('ok', 'LOTE confirmado', 'Continúa con CAJA.');
+      setMessage('ok', 'LOTE confirmado', 'Continúa con CAJA. La cantidad se calculará automáticamente.');
       focusField('#equipmentBox');
     }, true);
 
     box.addEventListener('keydown', event => {
       if (event.key !== 'Enter') return;
-      // El módulo de capacidad puede interceptar antes si todavía falta cantidad.
-      // Cuando el evento llega aquí, forzamos el flujo CAJA → CANTIDAD.
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!lotValid() || !boxValid()) return;
-      setMessage('ok', 'CAJA confirmada', 'Define ahora la CANTIDAD de equipos por caja.');
-      focusField('#equipmentQuantity');
-    }, true);
-
-    quantity.addEventListener('keydown', event => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (!lotValid() || !boxValid() || !quantityValid()) return;
-      setMessage('ok', 'Configuración confirmada', `Lote ${lot.value} · Caja ${box.value} · ${quantity.value} equipos. Continúa con SERIAL.`);
+      const count = currentBoxCount();
+      setMessage('ok', 'CAJA confirmada', `Cantidad automática: ${count}/${MAX_PER_BOX}. Continúa con SERIAL.`);
       focusField('#equipmentSerial');
     }, true);
 
@@ -148,11 +124,10 @@
       if (event.key !== 'Enter') return;
       if (captureMode() !== 'manual') return;
 
-      // En manual evitamos el comportamiento anterior UA → CAJA.
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      if (!lotValid() || !boxValid() || !quantityValid()) return;
+      if (!lotValid() || !boxValid()) return;
       if (!serialValid()) {
         setMessage('error', 'SERIAL no confirmado', 'El SERIAL debe iniciar con M y tener exactamente 12 caracteres alfanuméricos.');
         focusField('#equipmentSerial');
@@ -164,12 +139,12 @@
         return;
       }
 
-      setMessage('ok', 'SERIAL y UA confirmados', 'Modo manual: pulsa Agregar equipo para guardar.');
+      setMessage('ok', 'SERIAL y UA confirmados', `La cantidad se calculará automáticamente, con máximo ${MAX_PER_BOX} equipos por caja. Pulsa Agregar equipo.`);
       add.focus({preventScroll: true});
     }, true);
 
     add.addEventListener('click', event => {
-      if (!lotValid() || !boxValid() || !quantityValid()) {
+      if (!lotValid() || !boxValid()) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
