@@ -50,7 +50,11 @@
     if (!automaticMode() || editingNow()) return;
     const panel = $('#equipmentValidationMessage');
     const text = String(panel?.textContent || '').replace(/\s+/g, ' ').trim();
-    if (!/registro duplicado bloqueado/i.test(text)) return;
+    const duplicate = /registro duplicado bloqueado/i.test(text);
+    if (!duplicate) {
+      lastDuplicateSignature = '';
+      return;
+    }
     if (text === lastDuplicateSignature) return;
     lastDuplicateSignature = text;
 
