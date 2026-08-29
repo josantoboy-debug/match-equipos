@@ -33,6 +33,7 @@
     process: ['asignacion proceso', 'asignacion', 'proceso', 'process', 'assignment'],
     lot: ['lote', 'lot', 'batch'],
     box: ['caja', 'box', 'carton'],
+    quantity: ['cantidad asignada', 'cantidad', 'quantity', 'assigned quantity', 'numero de equipos', 'n de equipos'],
     serial: ['serial', 'serial no', 'serial number', 'sn', 'host sn', 'host'],
     ua: ['ua', 'unit address', 'unitaddress', 'ua unit address', 'ua original']
   };
@@ -43,11 +44,19 @@
     return key ? obj[key] : '';
   }
 
+  function normalizeQuantity(value) {
+    const raw = String(value ?? '').trim();
+    if (!/^\d+$/.test(raw)) return 0;
+    const n = Number(raw);
+    return Number.isSafeInteger(n) && n >= 1 && n <= MAX_PER_BOX ? n : 0;
+  }
+
   function normalizedRecord(obj) {
     return {
       process: norm(valueFromObject(obj, aliases.process)),
       lot: norm(valueFromObject(obj, aliases.lot)),
       box: norm(valueFromObject(obj, aliases.box)),
+      quantity: normalizeQuantity(valueFromObject(obj, aliases.quantity)),
       serial: upper(valueFromObject(obj, aliases.serial)).replace(/\s+/g, ''),
       ua: norm(valueFromObject(obj, aliases.ua)).replace(/[-\s]/g, '')
     };
@@ -63,10 +72,12 @@
     const usable = records.filter(row => row.lot && row.box);
     if (!usable.length) return null;
     const last = usable[usable.length - 1];
-    const count = usable.filter(row => upper(row.lot) === upper(last.lot) && upper(row.box) === upper(last.box)).length;
-    const sameBoxProcess = [...usable].reverse().find(row => upper(row.lot) === upper(last.lot) && upper(row.box) === upper(last.box) && row.process)?.process;
+    const sameBox = usable.filter(row => upper(row.lot) === upper(last.lot) && upper(row.box) === upper(last.box));
+    const count = sameBox.length;
+    const sameBoxProcess = [...sameBox].reverse().find(row => row.process)?.process;
     const process = sameBoxProcess || [...usable].reverse().find(row => row.process)?.process || '';
-    return {lot:last.lot, box:last.box, process:norm(process), count, total:usable.length};
+    const quantity = [...sameBox].reverse().find(row => row.quantity)?.quantity || 0;
+    return {lot:last.lot, box:last.box, process:norm(process), quantity, count, total:usable.length};
   }
 
   function buildProcessMap(records) {
@@ -126,14 +137,15 @@
         : [];
       const records = list.map(normalizedRecord);
 
-      // Los JSON generados por el adaptador ACCDB guardan también el contexto.
       if (parsed?.contexto_integrado && records.length) {
         const context = parsed.contexto_integrado;
         const process = norm(context.proceso || context.process);
         const lot = norm(context.lote || context.lot);
+        const quantity = normalizeQuantity(context.cantidad_por_caja || context.cantidad || context.quantity);
         records.forEach(row => {
           if (!row.process && process) row.process = process;
           if (!row.lot && lot) row.lot = lot;
+          if (!row.quantity && quantity) row.quantity = quantity;
         });
       }
       return records;
@@ -184,14 +196,14 @@
     const panel = $('#equipmentValidationMessage');
     if (!panel) return;
     panel.className = 'equipment-validation ok';
-    panel.innerHTML = `<span class="equipment-validation-icon">✓</span><div><strong>Registro cargado y contexto restaurado</strong><small>${context.count} equipo${context.count === 1 ? '' : 's'} en Caja ${escapeHtml(context.box)} · Lote ${escapeHtml(context.lot)}${context.process ? ` · ${escapeHtml(context.process)}` : ''}. Puedes continuar desde SERIAL.</small></div>`;
+    panel.innerHTML = `<span class="equipment-validation-icon">✓</span><div><strong>Registro cargado y contexto restaurado</strong><small>Caja ${escapeHtml(context.box)}: ${context.count}/${context.quantity} equipos · Lote ${escapeHtml(context.lot)}${context.process ? ` · ${escapeHtml(context.process)}` : ''}. Puedes continuar desde SERIAL.</small></div>`;
   }
 
   function showToast(context) {
     const toast = $('#toast');
     if (!toast) return;
     toast.className = 'toast show ok';
-    toast.innerHTML = `<strong>Contexto restaurado</strong><span>${escapeHtml(lastFileName || 'Registro cargado')} · Caja ${escapeHtml(context.box)} · ${context.count}/${MAX_PER_BOX} equipos.</span>`;
+    toast.innerHTML = `<strong>Contexto restaurado</strong><span>${escapeHtml(lastFileName || 'Registro cargado')} · Caja ${escapeHtml(context.box)} · ${context.count}/${context.quantity} equipos.</span>`;
     clearTimeout(showToast.timer);
     showToast.timer = setTimeout(() => toast.classList.remove('show'), 4800);
   }
@@ -204,7 +216,8 @@
     if (!lot || !box) return null;
     const activeRows = source.filter(row => upper(row?.lot) === upper(lot) && upper(row?.box) === upper(box));
     const process = [...source].reverse().find(row => norm(row?.process))?.process || '';
-    return {lot, box, process:norm(process), count:activeRows.length, total:source.length};
+    const quantity = normalizeQuantity([...activeRows].reverse().find(row => row?.assignedQuantity)?.assignedQuantity);
+    return {lot, box, process:norm(process), quantity, count:activeRows.length, total:source.length};
   }
 
   function restoreProcesses(source) {
@@ -226,21 +239,23 @@
     if (!rowContext) return false;
     const context = {
       ...rowContext,
-      process: norm(fileContext?.process) || norm(rowContext.process)
+      process: norm(fileContext?.process) || norm(rowContext.process),
+      quantity: normalizeQuantity(fileContext?.quantity) || normalizeQuantity(rowContext.quantity) || Math.min(MAX_PER_BOX, Math.max(1, rowContext.count))
     };
 
-    // Si el archivo aporta un último Lote/Caja explícito, úsalo como punto de continuación.
     if (fileContext?.lot && fileContext?.box) {
       const matching = source.filter(row => upper(row.lot) === upper(fileContext.lot) && upper(row.box) === upper(fileContext.box));
       if (matching.length) {
         context.lot = fileContext.lot;
         context.box = fileContext.box;
         context.count = matching.length;
+        context.quantity = normalizeQuantity(fileContext.quantity) || Math.min(MAX_PER_BOX, Math.max(1, matching.length));
       }
     }
 
     setInput('#equipmentLot', context.lot);
     setInput('#equipmentBox', context.box);
+    setInput('#equipmentQuantity', context.quantity);
 
     if (context.process) {
       if (typeof window.EquipmentRegistry?.setCurrentProcess === 'function') {
@@ -251,12 +266,8 @@
       }
     }
 
-    const hiddenQuantity = $('#equipmentQuantity');
-    if (hiddenQuantity) hiddenQuantity.value = String(MAX_PER_BOX);
-    const quantityDisplay = $('#equipmentQuantityDisplay');
-    if (quantityDisplay) quantityDisplay.value = String(context.count);
     const currentCount = $('#equipmentCurrentBoxCount');
-    if (currentCount) currentCount.textContent = `${context.count} / ${MAX_PER_BOX}`;
+    if (currentCount) currentCount.textContent = `${context.count} / ${context.quantity}`;
     const currentLabel = $('#equipmentCurrentBoxLabel');
     if (currentLabel) currentLabel.textContent = `${upper(context.lot)} · ${upper(context.box)}${context.process ? ` · ${context.process}` : ''}`;
 
@@ -272,6 +283,7 @@
     }
 
     window.EquipmentCapacity?.refresh?.();
+    window.EquipmentBoxPrint?.refresh?.();
     window.OperatorSession?.saveNow?.();
     setMessage(context);
     showToast(context);
