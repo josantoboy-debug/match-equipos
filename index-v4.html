@@ -22,8 +22,9 @@
         const response=await fetch('index.html?build=20260829-4',{cache:'no-store'});
         if(!response.ok)throw new Error('HTTP '+response.status);
         let html=await response.text();
-        html=html.replace(/<script\s+src="operator-session\.js(?:\?[^\"]*)?"\s*><\/script>/i,'<script src="operator-session.js?v=20260829-4"><\\/script>');
-        html=html.replace(/<script\s+src="operator-lock\.js(?:\?[^\"]*)?"\s*><\/script>/i,'<script src="operator-lock.js?v=20260829-4"><\\/script>');
+        const closeScript='</scr'+'ipt>';
+        html=html.replace(/<script\s+src="operator-session\.js(?:\?[^\"]*)?"\s*><\/script>/i,'<script src="operator-session.js?v=20260829-4">'+closeScript);
+        html=html.replace(/<script\s+src="operator-lock\.js(?:\?[^\"]*)?"\s*><\/script>/i,'<script src="operator-lock.js?v=20260829-4">'+closeScript);
         document.open();
         document.write(html);
         document.close();
