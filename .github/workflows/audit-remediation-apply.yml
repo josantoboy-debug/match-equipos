@@ -1,0 +1,93 @@
+name: Audit remediation apply
+
+on:
+  push:
+    branches: [audit/remediation-v1]
+
+permissions:
+  contents: write
+
+jobs:
+  remediate-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/remediation-v1
+          fetch-depth: 0
+
+      - name: Apply safe audit remediations
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('production-core.js')
+          s = p.read_text()
+          old = """    async validate() {\n      if (!this.token) return { ok: false, code: 'NO_SESSION' };\n      const data = await this.edge('validate');\n      if (!data?.ok) this.saveSession(null);\n      else this.saveSession({ ...this.session, operator: data.operator, session_id: data.session_id, expires_at: data.expires_at });\n      return data;\n    }"""
+          new = """    async validate() {\n      if (!this.token) return { ok: false, code: 'NO_SESSION' };\n      if (!navigator.onLine) {\n        const expires = Date.parse(this.session?.expires_at || '');\n        if (this.operator && Number.isFinite(expires) && expires > Date.now()) {\n          return { ok: true, offline: true, operator: this.operator, session_id: this.session?.session_id || null, expires_at: this.session.expires_at };\n        }\n        return { ok: false, code: 'OFFLINE_SESSION_EXPIRED' };\n      }\n      const data = await this.edge('validate');\n      if (!data?.ok) this.saveSession(null);\n      else this.saveSession({ ...this.session, operator: data.operator, session_id: data.session_id, expires_at: data.expires_at });\n      return data;\n    }"""
+          if old not in s: raise SystemExit('validate block not found')
+          s = s.replace(old, new, 1)
+
+          old = """      if (task.type === 'equipment.register') return this.data.registerEquipment(task.payload);"""
+          new = """      if (task.type === 'equipment.register') {\n        const result = await this.data.registerEquipment(task.payload);\n        if (result?.ok === false && result?.code === 'DUPLICATE') {\n          document.dispatchEvent(new CustomEvent('sync:conflict', { detail: { type: 'DUPLICATE', payload: task.payload, result } }));\n          return result;\n        }\n        if (result?.ok === false) throw Object.assign(new Error(result?.message || result?.code || 'Registro rechazado'), { code: result?.code });\n        return result;\n      }"""
+          if old not in s: raise SystemExit('equipment.register block not found')
+          s = s.replace(old, new, 1)
+
+          old = """    box.querySelector('button').addEventListener('click', () => location.reload());"""
+          new = """    box.querySelector('button').addEventListener('click', async () => {\n      const button = box.querySelector('button');\n      if (sync.running) { button.textContent = 'Esperando sincronización…'; return; }\n      try {\n        const reg = await navigator.serviceWorker?.getRegistration?.();\n        await reg?.update?.();\n        if (reg?.waiting) reg.waiting.postMessage('SKIP_WAITING');\n        if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });\n        setTimeout(() => location.reload(), 1200);\n      } catch { location.reload(); }\n    });"""
+          if old not in s: raise SystemExit('update button block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('cloud-session.js')
+          s = p.read_text()
+          marker = """  document.addEventListener('production:ready', start, { once:true });"""
+          shim = """  window.OperatorSession = window.OperatorSession || {\n    getCurrentOperator: () => auth()?.operator || null,\n    logout: () => auth()?.logout?.(),\n    saveNow: () => window.ProductionCore?.SyncService?.flush?.()\n  };\n\n"""
+          if marker not in s: raise SystemExit('cloud session marker not found')
+          if 'window.OperatorSession = window.OperatorSession ||' not in s:
+              s = s.replace(marker, shim + marker, 1)
+          p.write_text(s)
+
+          p = Path('index.html')
+          s = p.read_text()
+          old = """<script src=\"https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js\"></script>\n<script src=\"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4\"></script>\n<script src=\"config.js?v=1.0.0\"></script>\n<script src=\"production-core.js?v=1.0.0\"></script>\n<script src=\"cloud-session.js?v=1.0.0\"></script>"""
+          new = """<script src=\"config.js?v=1.0.0\"></script>\n<script src=\"production-core.js?v=1.0.0\"></script>\n<script src=\"https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js\"></script>\n<script src=\"https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4\"></script>\n<script src=\"cloud-session.js?v=1.0.0\"></script>"""
+          if old not in s: raise SystemExit('index runtime block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+      - name: Syntax and static checks
+        run: |
+          set -euo pipefail
+          node --check production-core.js
+          node --check cloud-session.js
+          grep -F "window.OperatorSession = window.OperatorSession ||" cloud-session.js
+          grep -F "OFFLINE_SESSION_EXPIRED" production-core.js
+          grep -F "sync:conflict" production-core.js
+
+      - name: Install browser test dependency
+        run: npm install --no-save puppeteer-core@24.16.0
+
+      - name: Start application
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/audit-http.log 2>&1 &
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0; sleep 1; done
+          cat /tmp/audit-http.log
+          exit 1
+
+      - name: Chromium desktop tablet mobile smoke tests
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: node tests/production-smoke.cjs
+
+      - name: Commit verified remediations
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add production-core.js cloud-session.js index.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Apply verified audit remediations"
+          git push origin HEAD:audit/remediation-v1
