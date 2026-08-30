@@ -14,9 +14,22 @@
     return store.operators.filter(operator => operator && operator.id && operator.name && operator.active !== false && !operator.cloud);
   }
 
+  function removeLegacyOptions() {
+    const select = $('#operatorSelect');
+    if (!select) return;
+    [...select.options]
+      .filter(option => option.dataset.legacyLocal === 'true')
+      .forEach(option => option.remove());
+  }
+
   function appendLegacyOptions() {
     const select = $('#operatorSelect');
     if (!select) return;
+
+    if (window.__MATCH_CLOUD_BOOTSTRAPPED__ === true) {
+      removeLegacyOptions();
+      return;
+    }
 
     const existing = new Set([...select.options].map(option => option.value));
     getLegacyOperators().forEach(operator => {
