@@ -5,6 +5,7 @@
   const MAX_PER_BOX = 64;
   let lastCount = 0;
   let focusTimer = null;
+  let lastDuplicateSignature = '';
 
   function automaticMode() {
     return window.EquipmentRegistry?.getCaptureMode?.() === 'automatic';
@@ -45,6 +46,44 @@
     }, delay);
   }
 
+  function recoverFromDuplicate() {
+    if (!automaticMode() || editingNow()) return;
+    const panel = $('#equipmentValidationMessage');
+    const text = String(panel?.textContent || '').replace(/\s+/g, ' ').trim();
+    const duplicate = /registro duplicado bloqueado/i.test(text);
+    if (!duplicate) {
+      lastDuplicateSignature = '';
+      return;
+    }
+    if (text === lastDuplicateSignature) return;
+    lastDuplicateSignature = text;
+
+    const serial = $('#equipmentSerial');
+    const ua = $('#equipmentUA');
+    if (serial) {
+      serial.value = '';
+      serial.classList.remove('field-valid', 'field-invalid');
+    }
+    if (ua) {
+      ua.value = '';
+      ua.classList.remove('field-valid', 'field-invalid');
+    }
+
+    focusSerial(40);
+  }
+
+  function watchDuplicateErrors() {
+    const panel = $('#equipmentValidationMessage');
+    if (!panel) return;
+    new MutationObserver(recoverFromDuplicate).observe(panel, {
+      childList:true,
+      subtree:true,
+      characterData:true,
+      attributes:true,
+      attributeFilter:['class']
+    });
+  }
+
   function watchRegistrations() {
     const body = $('#equipmentRegisterBody');
     if (!body) return;
@@ -63,6 +102,7 @@
     if (!serial || !ua) return;
 
     watchRegistrations();
+    watchDuplicateErrors();
 
     ua.addEventListener('keydown', event => {
       if (event.key !== 'Enter' || !automaticMode()) return;
@@ -77,6 +117,6 @@
       }
     });
 
-    window.EquipmentAutoFocus = {focusSerial};
+    window.EquipmentAutoFocus = {focusSerial, recoverFromDuplicate};
   });
 })();

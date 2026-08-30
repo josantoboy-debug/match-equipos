@@ -16,6 +16,7 @@
   let queue = [];
   let voices = [];
   let selectedVoice = null;
+  let pendingWelcome = '';
   let lastToastSignature = '';
   let lastValidationSignature = '';
   let lastResultSignature = '';
@@ -231,6 +232,11 @@
     if (unlocked || event?.isTrusted === false) return;
     unlocked = true;
     refreshVoices();
+    if (pendingWelcome) {
+      const text = pendingWelcome;
+      pendingWelcome = '';
+      announce(text, {priority:'high', interrupt:true, dedupeMs:0, key:`welcome-unlock:${text}`});
+    }
     drainQueue();
     document.documentElement.dataset.ttsUnlocked = '1';
   }
@@ -461,7 +467,9 @@
   function installLifecycleAnnouncements() {
     document.addEventListener('operator:login', event => {
       const name = normalizeSpace(event.detail?.name);
-      announce(name ? `Sesión iniciada. Operador ${name}.` : 'Sesión iniciada.', {priority:'high', key:`operator-login:${name}`, dedupeMs:1500});
+      const welcome = name ? `Bienvenida ${name}` : 'Bienvenida';
+      if (!unlocked) pendingWelcome = welcome;
+      else announce(welcome, {priority:'high', interrupt:true, key:`operator-login:${name}`, dedupeMs:1500});
       setTimeout(installLoginControl, 0);
     });
 

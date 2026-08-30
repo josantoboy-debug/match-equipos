@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#090d14">
+  <title>Match Equipos · cargando actualización</title>
+  <style>
+    html,body{height:100%;margin:0;background:#090d14;color:#edf3fb;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    body{display:grid;place-items:center}
+    .box{padding:24px;text-align:center;max-width:420px}
+    .dot{width:12px;height:12px;border-radius:50%;background:#4f8cff;margin:0 auto 14px;animation:p 1s infinite alternate}
+    @keyframes p{to{opacity:.25;transform:scale(.75)}}
+    small{color:#94a3b8}
+  </style>
+</head>
+<body>
+  <div class="box"><div class="dot"></div><strong>Cargando Match Equipos…</strong><br><small>Aplicando el acceso central actualizado.</small></div>
+  <script>
+    location.replace('index.html?build=20260830-stable1');
+  </script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Recuperación local · REGISTRO Y VERIFICACION</title>
+  <style>
+    :root{color-scheme:dark;background:#090d14;color:#edf3fb;font-family:Arial,Helvetica,sans-serif}
+    *{box-sizing:border-box}
+    body{margin:0;background:#090d14;color:#edf3fb}
+    main{max-width:980px;margin:0 auto;padding:28px 18px 60px}
+    h1{margin:0 0 8px;font-size:26px}
+    p{color:#a8b3c7;line-height:1.55}
+    .warning{border:1px solid #8c6822;background:#251d0b;padding:14px 16px;border-radius:12px;color:#ffd989;margin:18px 0}
+    .card{border:1px solid #263247;background:#111824;border-radius:14px;padding:16px;margin:14px 0}
+    .row{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .meta{font-size:13px;color:#9ba9bd;line-height:1.6}
+    .count{font-size:22px;font-weight:800}
+    button{border:1px solid #4268a9;background:#2457a7;color:white;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer}
+    button.secondary{background:#182234;border-color:#38485f}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    pre{white-space:pre-wrap;word-break:break-word;background:#080c12;border:1px solid #202a3a;padding:12px;border-radius:10px;max-height:260px;overflow:auto;font-size:12px;color:#c9d5e7}
+    .ok{color:#7ee2a8}.bad{color:#ff9a9a}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Recuperación de registros locales</h1>
+  <p>Esta página es de solo lectura. No inicia sesión, no carga el registrador y no modifica ni elimina datos del navegador.</p>
+  <div class="warning"><strong>No borres datos del sitio ni uses “Nueva sesión” antes de terminar esta revisión.</strong></div>
+  <div class="row">
+    <button id="scanBtn" type="button">Buscar respaldos locales</button>
+    <button id="allBtn" class="secondary" type="button">Descargar diagnóstico completo</button>
+  </div>
+  <div id="summary" class="card"><div class="meta">Pulsa “Buscar respaldos locales”.</div></div>
+  <section id="results"></section>
+</main>
+<script>
+(() => {
+  'use strict';
+  const APP_KEY='matchEquipos.operatorAccess.v1';
+  const results=document.getElementById('results');
+  const summary=document.getElementById('summary');
+  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  const parse=v=>{try{return JSON.parse(v)}catch{return null}};
+  function operators(){
+    const store=parse(localStorage.getItem(APP_KEY));
+    return Array.isArray(store?.operators)?store.operators:[];
+  }
+  function registryEntries(){
+    const ops=operators();
+    const opById=new Map(ops.map(o=>[o.id,o]));
+    const found=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(!key || !key.startsWith(APP_KEY+'.') || !key.endsWith('.registry')) continue;
+      const raw=localStorage.getItem(key);
+      const data=parse(raw);
+      const id=key.slice((APP_KEY+'.').length,-'.registry'.length);
+      const rows=Array.isArray(data?.rows)?data.rows:[];
+      const lots=[...new Set(rows.map(r=>String(r.lot||'').trim()).filter(Boolean))];
+      const boxes=[...new Set(rows.map(r=>String(r.box||'').trim()).filter(Boolean))];
+      const processes=[...new Set(rows.map(r=>String(r.process||'').trim()).filter(Boolean))];
+      found.push({key,id,operator:opById.get(id)?.name||id,savedAt:data?.savedAt||'',rows,lots,boxes,processes,raw});
+    }
+    return found;
+  }
+  function download(name,text){
+    const blob=new Blob([text],{type:'application/json;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+  }
+  function safeName(v){return String(v||'OPERADOR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'').toUpperCase()||'OPERADOR'}
+  function render(){
+    const entries=registryEntries();
+    const total=entries.reduce((n,e)=>n+e.rows.length,0);
+    summary.innerHTML=`<div class="count">${total} registro${total===1?'':'s'} encontrados</div><div class="meta">${entries.length} respaldo${entries.length===1?'':'s'} de operador detectado${entries.length===1?'':'s'} en este navegador y dominio.</div>`;
+    results.innerHTML='';
+    if(!entries.length){results.innerHTML='<div class="card bad"><strong>No se encontró un respaldo .registry en localStorage.</strong><div class="meta">Esto no prueba que nunca existiera; puede haber sido reemplazado o eliminado.</div></div>';return}
+    entries.forEach((e,index)=>{
+      const card=document.createElement('article');card.className='card';
+      const process=e.processes.length?e.processes.join(' / '):'—';
+      card.innerHTML=`<div class="row"><div><strong>${esc(e.operator)}</strong><div class="meta">Guardado: ${esc(e.savedAt||'sin fecha')}<br>Asignación/Proceso: ${esc(process)}<br>Lotes: ${esc(e.lots.join(', ')||'—')}<br>Cajas: ${esc(e.boxes.join(', ')||'—')}</div></div><div class="count ok">${e.rows.length}</div></div><div class="row" style="margin-top:12px"><button type="button" data-download="${index}">Descargar respaldo JSON</button><button type="button" class="secondary" data-preview="${index}">Ver primeros registros</button></div><pre id="preview-${index}" hidden></pre>`;
+      results.appendChild(card);
+    });
+    results.querySelectorAll('[data-download]').forEach(btn=>btn.addEventListener('click',()=>{
+      const e=entries[Number(btn.dataset.download)];
+      download(`RECUPERADO_${safeName(e.operator)}_${e.rows.length}-REGISTROS.json`,JSON.stringify({recoveredAt:new Date().toISOString(),operator:e.operator,savedAt:e.savedAt,registros:e.rows},null,2));
+    }));
+    results.querySelectorAll('[data-preview]').forEach(btn=>btn.addEventListener('click',()=>{
+      const i=Number(btn.dataset.preview),e=entries[i],pre=document.getElementById(`preview-${i}`);pre.hidden=!pre.hidden;if(!pre.hidden)pre.textContent=JSON.stringify(e.rows.slice(0,12),null,2);
+    }));
+  }
+  document.getElementById('scanBtn').addEventListener('click',render);
+  document.getElementById('allBtn').addEventListener('click',()=>{
+    const payload={createdAt:new Date().toISOString(),origin:location.origin,keys:{}};
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k?.startsWith('matchEquipos.'))payload.keys[k]=localStorage.getItem(k)}
+    download(`DIAGNOSTICO_RECUPERACION_${new Date().toISOString().replace(/[:.]/g,'-')}.json`,JSON.stringify(payload,null,2));
+  });
+  render();
+})();
+</script>
+</body>
+</html>

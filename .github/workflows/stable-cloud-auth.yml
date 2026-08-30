@@ -1,0 +1,158 @@
+name: Stable cloud auth gate
+
+on:
+  push:
+    branches:
+      - main
+      - repair/stable-cloud-auth-20260830
+    paths:
+      - 'index.html'
+      - 'index-v4.html'
+      - 'operator-session.js'
+      - 'cloud-operator-bridge.js'
+      - 'operator-lock.js'
+      - 'audit-fixes.js'
+      - 'theme-control.js'
+      - 'tts-control.js'
+      - '.github/workflows/stable-cloud-auth.yml'
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JavaScript and load-order checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F 'cloud-operator-bridge.js?v=20260830-stable1' index.html
+          grep -F "location.replace('index.html?build=20260830-stable1')" index-v4.html
+          if grep -E 'secure-bootstrap-patch|central-operator-selector-fix|legacy-operator-preserve' index.html; then
+            echo 'Conflicting authentication patches are still loaded'
+            exit 1
+          fi
+          if grep -F 'document.write' operator-lock.js; then
+            echo 'Dynamic document loading is not allowed in the authentication path'
+            exit 1
+          fi
+          if grep -F 'core_bootstrap_admin_service' cloud-operator-bridge.js | grep -v 'core_bootstrap_admin_service_v2'; then
+            echo 'The revoked bootstrap RPC is still active'
+            exit 1
+          fi
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        run: |
+          python3 -m http.server 4174 --bind 127.0.0.1 > /tmp/match-auth-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/match-auth-http.log
+          exit 1
+
+      - name: Desktop, tablet and mobile authentication smoke test
+        shell: bash
+        run: |
+          cat > /tmp/match-auth-smoke.cjs <<'NODE'
+          const assert = require('assert');
+          const puppeteer = require(process.cwd() + '/node_modules/puppeteer-core');
+
+          const operator = {id:'00000000-0000-4000-8000-000000000001',name:'Operador Prueba',role:'admin',active:true,version:1};
+          const viewports = [
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless:true,
+              executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome',
+              args:['--no-sandbox','--disable-setuid-sandbox']
+            });
+
+            for (const viewport of viewports) {
+              const page = await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const errors=[];
+              page.on('pageerror', error => errors.push(String(error)));
+              await page.setRequestInterception(true);
+              page.on('request', request => {
+                const url=request.url();
+                if (url.includes('/rpc/core_list_operators_service')) {
+                  request.respond({
+                    status:200,
+                    contentType:'application/json',
+                    headers:{
+                      'access-control-allow-origin':'*',
+                      'access-control-allow-headers':'apikey,content-type',
+                      'access-control-allow-methods':'POST,OPTIONS'
+                    },
+                    body:JSON.stringify({ok:true,bootstrapped:true,operators:[operator]})
+                  });
+                } else if (/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)) {
+                  request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+                } else if (url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')) {
+                  request.respond({status:400,contentType:'application/json',body:'{"ok":false}'});
+                } else {
+                  request.continue();
+                }
+              });
+
+              await page.goto(`http://127.0.0.1:4174/?gate=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForSelector('#operatorLock',{visible:true,timeout:5000});
+              await page.waitForFunction(() => window.__MATCH_CLOUD_AUTH_READY__===true && document.querySelector('#operatorSelect')?.options.length === 1 && document.querySelector('#operatorSelect')?.selectedOptions?.[0]?.textContent.includes('Operador Prueba'),{timeout:5000});
+              await page.waitForSelector('#operatorThemeControl',{timeout:5000});
+              await page.waitForSelector('#operatorVoiceControl',{timeout:5000});
+              const state=await page.evaluate(() => {
+                const lock=document.querySelector('#operatorLock');
+                const card=document.querySelector('.operator-login-card')?.getBoundingClientRect();
+                const scripts=[...document.scripts].map(script=>script.getAttribute('src')||'');
+                return {
+                  ready:window.__MATCH_CLOUD_AUTH_READY__===true,
+                  selected:document.querySelector('#operatorSelect')?.selectedOptions?.[0]?.textContent,
+                  loginEnabled:!document.querySelector('#operatorLoginBtn')?.disabled,
+                  mainLocked:document.querySelector('main.app')?.getAttribute('inert')!==null,
+                  overlayInteractive:lock?.getAttribute('inert')===null && getComputedStyle(lock).pointerEvents!=='none',
+                  directCloud:scripts.some(src=>src.startsWith('cloud-operator-bridge.js?v=20260830-stable1')),
+                  obsoletePatch:scripts.some(src=>/secure-bootstrap-patch|central-operator-selector-fix|legacy-operator-preserve/.test(src)),
+                  cardFits:card && card.left>=0 && card.right<=innerWidth,
+                  themeControl:!!document.querySelector('#operatorThemeControl'),
+                  voiceControl:!!document.querySelector('#operatorVoiceControl')
+                };
+              });
+              assert.deepStrictEqual(state,{ready:true,selected:'Operador Prueba · Admin',loginEnabled:true,mainLocked:true,overlayInteractive:true,directCloud:true,obsoletePatch:false,cardFits:true,themeControl:true,voiceControl:true});
+
+              await Promise.race([
+                page.evaluate(() => new Promise(resolve => setTimeout(() => resolve('responsive'),100))),
+                new Promise((_,reject) => setTimeout(() => reject(new Error('Page event loop is blocked by a mutation-observer cycle')),2000))
+              ]);
+              await page.click('#operatorNewBtn');
+              await page.waitForSelector('#operatorCreateBox.open',{visible:true,timeout:3000});
+              const create=await page.evaluate(() => ({
+                admins:document.querySelector('#cloudAdminSelect')?.options.length,
+                bootstrapLogin:!!document.querySelector('#cloudBootstrapLoginCode'),
+                bootstrapCreate:!!document.querySelector('#cloudBootstrapCreateCode')
+              }));
+              assert.deepStrictEqual(create,{admins:1,bootstrapLogin:false,bootstrapCreate:false});
+              assert.deepStrictEqual(errors,[]);
+              await page.close();
+            }
+
+            await browser.close();
+            console.log('MATCH_CLOUD_AUTH_GATE_OK');
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
+          node /tmp/match-auth-smoke.cjs
+
