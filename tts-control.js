@@ -177,12 +177,9 @@
   }
 
   function watchLogin() {
-    installLoginControls();
+    if (installLoginControls()) return;
     const observer = new MutationObserver(() => {
-      installLoginControls();
-      bindOperatorSelect();
-      installSpeechPolicy();
-      ensureCoreAlertsEnabled();
+      if (installLoginControls()) observer.disconnect();
     });
     observer.observe(document.documentElement, {childList:true, subtree:true});
   }

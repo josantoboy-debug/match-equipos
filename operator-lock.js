@@ -1,8 +1,3 @@
-document.write('<script src="secure-bootstrap-patch.js?v=20260829-2"><\/script>');
-document.write('<script src="cloud-operator-bridge.js?v=20260829-1"><\/script>');
-document.write('<script src="central-operator-selector-fix.js?v=20260829-4"><\/script>');
-document.write('<script src="legacy-operator-preserve.js?v=20260829-4"><\/script>');
-
 (() => {
   'use strict';
 

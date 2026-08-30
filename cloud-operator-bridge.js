@@ -33,6 +33,10 @@
     return String(value ?? '').trim().replace(/\s+/g, ' ');
   }
 
+  function normalizeBootstrapCode(value) {
+    return String(value ?? '').trim().toUpperCase();
+  }
+
   async function hashPin(operatorId, pin) {
     const payload = new TextEncoder().encode(`${operatorId}|${String(pin)}`);
     const digest = await crypto.subtle.digest('SHA-256', payload);
@@ -88,7 +92,10 @@
       INVALID_INPUT: 'Revisa los datos ingresados.',
       FORBIDDEN: 'Se requiere autorización de administrador.',
       INVALID_SESSION: 'La sesión ya no es válida.',
-      ALREADY_BOOTSTRAPPED: 'El sistema ya tiene un administrador configurado.'
+      ALREADY_BOOTSTRAPPED: 'El sistema ya tiene un administrador configurado.',
+      INVALID_BOOTSTRAP_CODE: 'Código de activación incorrecto.',
+      BOOTSTRAP_CODE_REQUIRED: 'Ingresa el código de activación inicial.',
+      BOOTSTRAP_UNAVAILABLE: 'La activación inicial ya no está disponible.'
     };
     return messages[code] || 'No se pudo completar la operación.';
   }
@@ -241,6 +248,30 @@
     select.innerHTML = admins.map(item => `<option value="${item.id}">${String(item.name).replace(/</g, '&lt;')}</option>`).join('');
   }
 
+  function syncBootstrapFields() {
+    const definitions = [
+      {box: '#operatorLoginBox', wrap: 'cloudBootstrapLoginWrap', input: 'cloudBootstrapLoginCode'},
+      {box: '#operatorCreateBox', wrap: 'cloudBootstrapCreateWrap', input: 'cloudBootstrapCreateCode'}
+    ];
+
+    definitions.forEach(definition => {
+      const existing = $(`#${definition.wrap}`);
+      if (bootstrapped !== false) {
+        existing?.remove();
+        return;
+      }
+      if (existing) return;
+      const box = $(definition.box);
+      const actions = box?.querySelector('.operator-login-actions');
+      if (!box || !actions) return;
+      const label = document.createElement('label');
+      label.id = definition.wrap;
+      label.innerHTML = `Código de activación inicial
+        <input id="${definition.input}" type="text" maxlength="32" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Código de activación">`;
+      box.insertBefore(label, actions);
+    });
+  }
+
   function updateNote() {
     const note = $('.operator-login-note', $('#operatorLock') || document);
     if (!note) return;
@@ -265,7 +296,19 @@
     }
     renderSelect();
     renderAdminSelect();
+    syncBootstrapFields();
     updateNote();
+    window.__MATCH_CLOUD_AUTH_READY__ = true;
+    window.__MATCH_CLOUD_BOOTSTRAPPED__ = bootstrapped;
+    window.__MATCH_CLOUD_OPERATORS__ = remoteOperators.map(operator => ({
+      id: operator.id,
+      name: operator.name,
+      role: operator.role,
+      active: operator.active !== false
+    }));
+    document.dispatchEvent(new CustomEvent('match:cloud-auth-ready', {
+      detail: {online: onlineAvailable, bootstrapped, operatorCount: remoteOperators.length}
+    }));
   }
 
   async function loginRemote(operatorId, pin, appName = APP_NAME) {
@@ -316,7 +359,13 @@
     if (!legacyOperator.pinHash || localHash !== legacyOperator.pinHash) {
       throw new Error('PIN incorrecto para migrar el operador local.');
     }
-    const bootstrap = await rpc('core_bootstrap_admin_service', {p_name: legacyOperator.name, p_pin: pin});
+    const bootstrapCode = normalizeBootstrapCode($('#cloudBootstrapLoginCode')?.value);
+    if (!bootstrapCode) throw new Error('Ingresa el código de activación inicial.');
+    const bootstrap = await rpc('core_bootstrap_admin_service_v2', {
+      p_name: legacyOperator.name,
+      p_pin: pin,
+      p_bootstrap_code: bootstrapCode
+    });
     if (!bootstrap?.ok) {
       const error = new Error(messageFor(bootstrap?.code));
       error.code = bootstrap?.code;
@@ -378,7 +427,13 @@
     let adminToken = null;
     try {
       if (bootstrapped === false) {
-        const bootstrap = await rpc('core_bootstrap_admin_service', {p_name: name, p_pin: pin});
+        const bootstrapCode = normalizeBootstrapCode($('#cloudBootstrapCreateCode')?.value);
+        if (!bootstrapCode) throw new Error('Ingresa el código de activación inicial.');
+        const bootstrap = await rpc('core_bootstrap_admin_service_v2', {
+          p_name: name,
+          p_pin: pin,
+          p_bootstrap_code: bootstrapCode
+        });
         if (!bootstrap?.ok) throw new Error(messageFor(bootstrap?.code));
         const login = await loginRemote(bootstrap.operator.id, pin, APP_NAME);
         await finishLogin(login, pin);

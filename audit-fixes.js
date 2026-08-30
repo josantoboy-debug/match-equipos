@@ -21,7 +21,7 @@
     }
     if (window.AppTheme || document.querySelector('script[data-theme-control]')) return;
     const script = document.createElement('script');
-    script.src = 'theme-control.js?v=188ba0a';
+    script.src = 'theme-control.js?v=20260830-stable1';
     script.dataset.themeControl = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar theme-control.js');
@@ -38,7 +38,7 @@
     }
     if (window.AppTTS || document.querySelector('script[data-tts-control]')) return;
     const script = document.createElement('script');
-    script.src = 'tts-control.js?v=3c901db';
+    script.src = 'tts-control.js?v=20260830-stable1';
     script.dataset.ttsControl = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-control.js');
