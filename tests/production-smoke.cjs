@@ -14,9 +14,28 @@ async function main(){
       Object.defineProperty(window,'SpeechSynthesisUtterance',{configurable:true,value:U});
       Object.defineProperty(window,'speechSynthesis',{configurable:true,get:()=>synth});
     });
-    const errors=[];page.on('pageerror',e=>errors.push(String(e)));
-    await page.goto('http://127.0.0.1:4173/?ci=1',{waitUntil:'domcontentloaded',timeout:20000});
-    await page.waitForFunction(()=>window.ProductionCore?.ValidationService,{timeout:12000});
+    const errors=[];
+    const consoleEvents=[];
+    const failedRequests=[];
+    page.on('pageerror',e=>errors.push(String(e)));
+    page.on('console',msg=>consoleEvents.push(`${msg.type()}: ${msg.text()}`));
+    page.on('requestfailed',req=>failedRequests.push(`${req.url()} :: ${req.failure()?.errorText||'failed'}`));
+    const response=await page.goto('http://127.0.0.1:4173/?ci=1',{waitUntil:'domcontentloaded',timeout:20000});
+    try {
+      await page.waitForFunction(()=>window.ProductionCore?.ValidationService,{timeout:12000});
+    } catch (error) {
+      const diagnostics=await page.evaluate(()=>({
+        href:location.href,
+        readyState:document.readyState,
+        appConfig:typeof window.APP_CONFIG,
+        productionCore:typeof window.ProductionCore,
+        supabase:typeof window.supabase,
+        scripts:[...document.scripts].map(s=>({src:s.src||'[inline]',loaded:s.readyState||null})),
+        text:document.body?.innerText?.slice(0,1200)||''
+      })).catch(e=>({diagnosticError:String(e)}));
+      console.error('STARTUP_DIAGNOSTICS',JSON.stringify({status:response?.status(),diagnostics,errors,consoleEvents,failedRequests},null,2));
+      throw error;
+    }
     const state=await page.evaluate(()=>({
       hostOk:ProductionCore.ValidationService.isValidHost('M12345678901'),
       hostBad:ProductionCore.ValidationService.isValidHost('M123'),
@@ -32,7 +51,7 @@ async function main(){
       manifest:!!document.querySelector('link[rel="manifest"]')
     }));
     assert.strictEqual(state.hostOk,true);assert.strictEqual(state.hostBad,false);assert.strictEqual(state.uaOk,true);assert.strictEqual(state.uaBad,false);assert.strictEqual(state.zero,'0000123456789012');
-    assert.ok(state.register&&state.boxRegister&&state.print&&state.tts&&state.status&&state.operatorShim&&state.manifest);
+    assert.ok(state.register&&state.boxRegister&&state.print&&state.tts&&state.status&&state.operatorShim&&state.manifest,`${vp.name}: ${JSON.stringify(state)}`);
     await page.evaluate(()=>document.dispatchEvent(new CustomEvent('operator:login',{detail:{id:'ci',name:'Operador CI',role:'operator'}})));
     await page.keyboard.press('Tab');
     await page.waitForFunction(()=>window.__spoken.some(x=>x.includes('Operador CI')),{timeout:3000});
