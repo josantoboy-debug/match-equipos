@@ -1,4 +1,5 @@
 document.write('<script src="cloud-operator-bridge.js?v=20260829-1"><\/script>');
+document.write('<script src="legacy-operator-preserve.js?v=20260829-1"><\/script>');
 
 (() => {
   'use strict';
