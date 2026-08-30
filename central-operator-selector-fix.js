@@ -15,22 +15,31 @@
     if (!select) return;
 
     const current = select.value;
-    const active = centralOperators.filter(operator => operator && operator.id && operator.name && operator.active !== false);
+    const active = centralOperators
+      .filter(operator => operator && operator.id && operator.name && operator.active !== false)
+      .slice()
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+
     if (!active.length) return;
 
-    const fragment = document.createDocumentFragment();
-    active
-      .slice()
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'))
-      .forEach(operator => {
+    const existing = [...select.options];
+    const alreadyCentral = existing.length === active.length && existing.every((option, index) => {
+      const operator = active[index];
+      return option.value === operator.id && option.dataset.cloudCentral === 'true';
+    });
+
+    if (!alreadyCentral) {
+      const fragment = document.createDocumentFragment();
+      active.forEach(operator => {
         const option = document.createElement('option');
         option.value = operator.id;
         option.textContent = `${operator.name}${operator.role === 'admin' ? ' · Admin' : ''}`;
         option.dataset.cloudCentral = 'true';
         fragment.appendChild(option);
       });
+      select.replaceChildren(fragment);
+    }
 
-    select.replaceChildren(fragment);
     if (active.some(operator => operator.id === current)) select.value = current;
 
     const loginButton = document.querySelector('#operatorLoginBtn');
