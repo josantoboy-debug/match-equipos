@@ -91,7 +91,16 @@ jobs:
               page.on('request', request => {
                 const url=request.url();
                 if (url.includes('/rpc/core_list_operators_service')) {
-                  request.respond({status:200,contentType:'application/json',body:JSON.stringify({ok:true,bootstrapped:true,operators:[operator]})});
+                  request.respond({
+                    status:200,
+                    contentType:'application/json',
+                    headers:{
+                      'access-control-allow-origin':'*',
+                      'access-control-allow-headers':'apikey,content-type',
+                      'access-control-allow-methods':'POST,OPTIONS'
+                    },
+                    body:JSON.stringify({ok:true,bootstrapped:true,operators:[operator]})
+                  });
                 } else if (/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)) {
                   request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
                 } else if (url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')) {
@@ -146,3 +155,4 @@ jobs:
           })().catch(error => { console.error(error); process.exit(1); });
           NODE
           node /tmp/match-auth-smoke.cjs
+
