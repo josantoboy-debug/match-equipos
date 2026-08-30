@@ -1,3 +1,4 @@
+# trigger: 2026-08-29 audit remediation
 name: Audit remediation apply
 
 on:
