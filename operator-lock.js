@@ -1,3 +1,5 @@
+document.write('<script src="cloud-operator-bridge.js?v=20260829-1"><\/script>');
+
 (() => {
   'use strict';
 
