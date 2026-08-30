@@ -1,4 +1,4 @@
-# trigger: 2026-08-29 audit remediation
+# trigger: 2026-08-29 audit remediation diagnostics
 name: Audit remediation apply
 
 on:
@@ -68,6 +68,7 @@ jobs:
           grep -F "window.OperatorSession = window.OperatorSession ||" cloud-session.js
           grep -F "OFFLINE_SESSION_EXPIRED" production-core.js
           grep -F "sync:conflict" production-core.js
+          grep -n "config.js\|production-core.js\|supabase-js" index.html | tail -10
 
       - name: Install browser test dependency
         run: npm install --no-save puppeteer-core@24.16.0
@@ -75,9 +76,9 @@ jobs:
       - name: Start application
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/audit-http.log 2>&1 &
-          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0; sleep 1; done
-          cat /tmp/audit-http.log
-          exit 1
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:4173/config.js?v=1.0.0 | head
+          curl -fsS http://127.0.0.1:4173/production-core.js?v=1.0.0 | head
 
       - name: Chromium desktop tablet mobile smoke tests
         env:
