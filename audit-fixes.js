@@ -4,6 +4,7 @@
   const $ = selector => document.querySelector(selector);
   const MAX_PER_BOX = 64;
   const THEME_ASSET_VERSION = '20260831-light2';
+  const TTS_ASSET_VERSION = '20260831-critical1';
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
@@ -33,13 +34,13 @@
     if (!document.querySelector('link[data-tts-control]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = 'tts-control.css?v=8c72993';
+      link.href = `tts-control.css?v=${TTS_ASSET_VERSION}`;
       link.dataset.ttsControl = '1';
       document.head.appendChild(link);
     }
     if (window.AppTTS || document.querySelector('script[data-tts-control]')) return;
     const script = document.createElement('script');
-    script.src = 'tts-control.js?v=20260830-stable1';
+    script.src = `tts-control.js?v=${TTS_ASSET_VERSION}`;
     script.dataset.ttsControl = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-control.js');
