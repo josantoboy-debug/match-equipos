@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const POLICY_VERSION = '20260831-critical2';
+  const POLICY_VERSION = '20260831-critical3';
   const STORAGE_PREFIX = 'matchEquipos.ttsPreference.v3';
   const OPERATOR_STORE_KEY = 'matchEquipos.operatorAccess.v1';
   const DEFAULTS = Object.freeze({welcome:false, criticalWarnings:true, alerts:false});

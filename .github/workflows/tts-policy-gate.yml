@@ -3,7 +3,7 @@ name: Selective TTS policy gate
 on:
   push:
     branches:
-      - repair/tts-default-off-20260831
+      - repair/tts-critical3-20260831
   pull_request:
     branches:
       - main
@@ -49,6 +49,7 @@ jobs:
           require('./tts-control.js');
           const api = window.AppTTS;
           assert(api, 'AppTTS no se publicó');
+          assert.strictEqual(api.version, '20260831-critical3');
           assert.deepStrictEqual(api.getPreference(), {welcome:false,criticalWarnings:true,alerts:false});
           assert.strictEqual(api.isCriticalWarning('Atención. Dispositivo duplicado.'), true);
           assert.strictEqual(api.isCriticalWarning('HOST SN INVÁLIDO. Debe comenzar con M.'), true);
@@ -75,15 +76,56 @@ jobs:
           console.log('MATCH_TTS_POLICY_OK', api.version, api.getPreference(), spoken.length);
           NODE
 
+      - name: Validate both new-session warning routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const assert = require('assert');
+          const listeners = new Map();
+          const makeButton = id => ({
+            id,
+            dataset:{},
+            addEventListener(type, fn){ if(type === 'click') listeners.set(id, fn); }
+          });
+          const buttons = {
+            '#newSessionBtn': makeButton('newSessionBtn'),
+            '#equipmentNewSessionBtn': makeButton('equipmentNewSessionBtn')
+          };
+          const announced = [];
+          global.document = {
+            readyState:'complete',
+            querySelector(selector){ return buttons[selector] || null; },
+            addEventListener(){},
+            documentElement:{}
+          };
+          global.MutationObserver = class { observe(){} disconnect(){} };
+          global.window = {MatchVoiceTTS:{announce(text, options){announced.push({text,options});}}};
+          require('./tts-critical-warnings.js');
+          assert.strictEqual(window.MatchCriticalWarnings.version, '20260831-critical3');
+          assert.deepStrictEqual(window.MatchCriticalWarnings.selectors, ['#newSessionBtn','#equipmentNewSessionBtn']);
+          assert.strictEqual(listeners.size, 2, 'Deben quedar enlazadas las dos rutas de Nueva sesión');
+          listeners.get('newSessionBtn')();
+          listeners.get('equipmentNewSessionBtn')();
+          assert.strictEqual(announced.length, 2);
+          assert(announced.every(item => /guardar o exportar el registro/.test(item.text)));
+          assert(announced.every(item => item.options?.priority === 'critical'));
+          console.log('MATCH_TTS_NEW_SESSION_ROUTES_OK', [...listeners.keys()].join(','));
+          NODE
+
       - name: Validate cache-busted loader and new-session warning
         shell: bash
         run: |
           set -euo pipefail
-          grep -F "const TTS_ASSET_VERSION = '20260831-critical2'" audit-fixes.js
+          grep -F "const TTS_ASSET_VERSION = '20260831-critical3'" audit-fixes.js
+          grep -F 'audit-fixes.js?v=20260831-critical3' index.html
+          grep -F 'data-tts-policy-version="20260831-critical3"' index.html
           grep -F 'tts-control.css?v=${TTS_ASSET_VERSION}' audit-fixes.js
           grep -F 'tts-control.js?v=${TTS_ASSET_VERSION}' audit-fixes.js
           grep -F 'tts-critical-warnings.js?v=${TTS_ASSET_VERSION}' audit-fixes.js
           grep -F 'data-tts-setting="criticalWarnings"' tts-control.js
           grep -F 'Duplicado · códigos · no Match · nueva sesión' tts-control.js
+          grep -F "'#newSessionBtn'" tts-critical-warnings.js
+          grep -F "'#equipmentNewSessionBtn'" tts-critical-warnings.js
           grep -F 'Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.' tts-critical-warnings.js
           ! grep -F "DEFAULTS = Object.freeze({welcome:false, alerts:true})" tts-control.js

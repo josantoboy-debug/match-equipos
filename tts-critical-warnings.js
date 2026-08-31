@@ -1,8 +1,9 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260831-critical2';
+  const VERSION = '20260831-critical3';
   const WARNING_TEXT = 'Precaución. Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.';
+  const NEW_SESSION_SELECTORS = Object.freeze(['#newSessionBtn', '#equipmentNewSessionBtn']);
 
   function announceNewSessionWarning() {
     window.MatchVoiceTTS?.announce?.(WARNING_TEXT, {
@@ -14,11 +15,16 @@
   }
 
   function bind() {
-    const button = document.querySelector('#equipmentNewSessionBtn');
-    if (!button || button.dataset.ttsCriticalWarningBound === '1') return !!button;
-    button.dataset.ttsCriticalWarningBound = '1';
-    button.addEventListener('click', announceNewSessionWarning, {capture:true});
-    return true;
+    let found = 0;
+    for (const selector of NEW_SESSION_SELECTORS) {
+      const button = document.querySelector(selector);
+      if (!button) continue;
+      found += 1;
+      if (button.dataset.ttsCriticalWarningBound === '1') continue;
+      button.dataset.ttsCriticalWarningBound = '1';
+      button.addEventListener('click', announceNewSessionWarning, {capture:true});
+    }
+    return found === NEW_SESSION_SELECTORS.length;
   }
 
   function watch() {
@@ -32,7 +38,13 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch, {once:true});
   else watch();
-  document.addEventListener('operator:login', () => setTimeout(bind, 0));
+  document.addEventListener('operator:login', () => setTimeout(watch, 0));
 
-  window.MatchCriticalWarnings = {version:VERSION, warningText:WARNING_TEXT, bind, announceNewSessionWarning};
+  window.MatchCriticalWarnings = {
+    version:VERSION,
+    warningText:WARNING_TEXT,
+    selectors:[...NEW_SESSION_SELECTORS],
+    bind,
+    announceNewSessionWarning
+  };
 })();
