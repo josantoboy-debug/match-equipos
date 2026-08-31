@@ -3,6 +3,7 @@
 
   const $ = selector => document.querySelector(selector);
   const MAX_PER_BOX = 64;
+  const THEME_ASSET_VERSION = '20260831-light2';
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
@@ -15,7 +16,7 @@
     if (!document.querySelector('link[data-theme-control]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = 'theme-control.css?v=253c9d6';
+      link.href = `theme-control.css?v=${THEME_ASSET_VERSION}`;
       link.dataset.themeControl = '1';
       document.head.appendChild(link);
     }
