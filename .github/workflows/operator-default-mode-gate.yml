@@ -26,8 +26,8 @@ jobs:
           set -euo pipefail
           for file in *.js; do node --check "$file"; done
           grep -F 'data-registration-mode-version="20260831-josueauto1"' index.html
-          grep -F 'data-global-search-version="20260831-autoclear2-sound1"' index.html
-          grep -F 'search-mode.js?v=20260831-autoclear2-sound1' index.html
+          grep -F 'data-global-search-version="20260831-autoclear3-crossmatch1"' index.html
+          grep -F 'search-mode.js?v=20260831-autoclear3-crossmatch1' index.html
           grep -F 'audit-fixes.js?v=20260831-josueauto1' index.html
           grep -F "REGISTER_DEFAULT_MODE_VERSION = '20260831-josueauto1'" audit-fixes.js
           grep -F 'equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}' audit-fixes.js
@@ -156,12 +156,12 @@ jobs:
                   mainInert:document.querySelector('main.app')?.hasAttribute('inert'),
                   moduleLoaded:[...document.scripts].some(s => (s.src||'').includes('equipment-register-default-mode.js?v=20260831-josueauto1')),
                   newSessionVersioned:[...document.scripts].some(s => (s.src||'').includes('equipment-new-session.js?v=20260831-josueauto1')),
-                  searchVersioned:[...document.scripts].some(s => (s.src||'').includes('search-mode.js?v=20260831-autoclear2-sound1')),
+                  searchVersioned:[...document.scripts].some(s => (s.src||'').includes('search-mode.js?v=20260831-autoclear3-crossmatch1')),
                   newSessionInstalled:newBtn?.dataset.safeNewSession === '1',
                   newSessionVisible:!!rect && rect.width>0 && rect.height>0
                 };
               });
-              assert.deepStrictEqual(state,{mode:'automatic',buttonText:'AUTOMÁTICO',marker:'20260831-josueauto1',globalSearchMarker:'20260831-autoclear2-sound1',operator:'Josue Parfait',mainInert:false,moduleLoaded:true,newSessionVersioned:true,searchVersioned:true,newSessionInstalled:true,newSessionVisible:true});
+              assert.deepStrictEqual(state,{mode:'automatic',buttonText:'AUTOMÁTICO',marker:'20260831-josueauto1',globalSearchMarker:'20260831-autoclear3-crossmatch1',operator:'Josue Parfait',mainInert:false,moduleLoaded:true,newSessionVersioned:true,searchVersioned:true,newSessionInstalled:true,newSessionVisible:true});
 
               await page.evaluate(() => window.EquipmentRegistry.setCaptureMode('manual'));
               await new Promise(resolve => setTimeout(resolve,100));

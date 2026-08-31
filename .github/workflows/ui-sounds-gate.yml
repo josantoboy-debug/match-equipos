@@ -62,11 +62,11 @@ jobs:
         run: |
           set -euo pipefail
           grep -F "UI_SOUND_VERSION = '20260831-sound1'" ui-sounds.js
-          grep -F "SEARCH_MODE_VERSION = '20260831-autoclear2-sound1'" search-mode.js
+          grep -F "SEARCH_MODE_VERSION = '20260831-autoclear3-crossmatch1'" search-mode.js
           grep -F 'data-ui-sound-version="20260831-sound1"' index.html
           grep -F '<meta name="ui-sound-version" content="20260831-sound1">' index.html
           grep -F 'ui-sounds.js?v=20260831-sound1' index.html
-          grep -F 'search-mode.js?v=20260831-autoclear2-sound1' index.html
+          grep -F 'search-mode.js?v=20260831-autoclear3-crossmatch1' index.html
           grep -F 'registrationSnapshot' ui-sounds.js
           grep -F 'announceFoundResult' search-mode.js
           if grep -F 'search-mode.js?v=20260831-autoclear1' index.html; then
@@ -175,7 +175,7 @@ jobs:
               }};
             </script>
             <script src="ui-sounds.js?v=20260831-sound1"></script>
-            <script src="search-mode.js?v=20260831-autoclear2-sound1"></script>
+            <script src="search-mode.js?v=20260831-autoclear3-crossmatch1"></script>
           </body>
           </html>
           HTML
@@ -227,7 +227,7 @@ jobs:
 
               await page.setCacheEnabled(false);
               await page.goto(`http://127.0.0.1:4179/ui-sounds-harness.tmp.html?v=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
-              await page.waitForFunction(()=>window.MatchUISounds?.version==='20260831-sound1' && window.MatchSearchModes?.version==='20260831-autoclear2-sound1');
+              await page.waitForFunction(()=>window.MatchUISounds?.version==='20260831-sound1' && window.MatchSearchModes?.version==='20260831-autoclear3-crossmatch1');
 
               let state=await page.evaluate(()=>({
                 soundVersion:MatchUISounds.version,
@@ -237,7 +237,7 @@ jobs:
               }));
               assert.deepStrictEqual(state,{
                 soundVersion:'20260831-sound1',
-                searchVersion:'20260831-autoclear2-sound1',
+                searchVersion:'20260831-autoclear3-crossmatch1',
                 focused:'searchInput',
                 overflow:false
               });
@@ -292,7 +292,7 @@ jobs:
 
               await page.setCacheEnabled(true);
               await page.reload({waitUntil:'domcontentloaded'});
-              await page.waitForFunction(()=>window.MatchUISounds?.version==='20260831-sound1' && window.MatchSearchModes?.version==='20260831-autoclear2-sound1');
+              await page.waitForFunction(()=>window.MatchUISounds?.version==='20260831-sound1' && window.MatchSearchModes?.version==='20260831-autoclear3-crossmatch1');
 
               const responsive=await Promise.race([
                 page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('ok'),100))),
@@ -325,7 +325,7 @@ jobs:
         env:
           PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
           SOUND_VERSION: 20260831-sound1
-          SEARCH_VERSION: 20260831-autoclear2-sound1
+          SEARCH_VERSION: 20260831-autoclear3-crossmatch1
         run: |
           set -uo pipefail
           ok=0
