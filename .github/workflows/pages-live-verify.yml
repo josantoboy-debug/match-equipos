@@ -2,7 +2,7 @@ name: Live Pages verification
 
 on:
   push:
-    branches: [main, verify-admin-page-live]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
