@@ -165,6 +165,17 @@ jobs:
                 document.querySelector('main.app')?.removeAttribute('inert');
               });
 
+              // Wait for the actual operational UI, not just DOMContentLoaded. This keeps the gate strict
+              // while avoiding sampling the search-mode initialization between class and paint updates.
+              await page.waitForFunction(() => {
+                const themeLink=document.querySelector('link[data-theme-control]');
+                const auto=document.querySelector('#searchModeAuto');
+                return !!themeLink?.sheet &&
+                  !!window.MatchSearchModes &&
+                  auto?.classList.contains('active') &&
+                  getComputedStyle(auto).backgroundColor==='rgb(37, 99, 235)';
+              },{timeout:7000});
+
               const state=await page.evaluate(() => {
                 const css=(sel,pseudo=null)=>getComputedStyle(document.querySelector(sel),pseudo);
                 const bg=sel=>css(sel).backgroundColor;
