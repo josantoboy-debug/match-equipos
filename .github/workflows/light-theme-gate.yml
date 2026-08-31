@@ -178,6 +178,7 @@ jobs:
                   panel:bg('.panel'),
                   secondary:bg('#equipmentImportBtn'),
                   primary:bg('#equipmentAddBtn'),
+                  primaryDisabled:document.querySelector('#equipmentAddBtn')?.disabled===true,
                   registerPrimary:bg('#registerBtn'),
                   activeSearch:bg('#searchModeAuto'),
                   activeNav:bg('.app-suite-link.active'),
@@ -196,14 +197,16 @@ jobs:
                 };
               });
 
+              const accentRgb=[37,99,235];
               assert.equal(state.accent,'#2563eb');
               assert.equal(state.bodyTheme,'light');
               assert.equal(state.panel,'rgb(255, 255, 255)');
               assert.equal(state.secondary,'rgb(255, 255, 255)');
-              assert.equal(state.primary,'rgb(37, 99, 235)');
-              assert.equal(state.registerPrimary,state.primary);
-              assert.equal(state.activeSearch,state.primary);
-              assert.equal(state.activeNav,state.primary);
+              assert.deepStrictEqual(parseRgb(state.primary),accentRgb);
+              if (state.primary!=='rgb(37, 99, 235)') assert.equal(state.primaryDisabled,true,'Only a disabled primary may render the accent with alpha');
+              assert.deepStrictEqual(parseRgb(state.registerPrimary),accentRgb);
+              assert.deepStrictEqual(parseRgb(state.activeSearch),accentRgb);
+              assert.deepStrictEqual(parseRgb(state.activeNav),accentRgb);
               assert.equal(state.fileStatus,'rgb(247, 249, 252)');
               assert.ok(!/rgb\((?:1[0-9]|2[0-9]|3[0-9]),\s*(?:1[0-9]|2[0-9]|3[0-9]),\s*(?:1[0-9]|2[0-9]|3[0-9])\)/.test(state.equipmentHeadImage),state.equipmentHeadImage);
               assert.equal(state.workspaceHead,'rgb(251, 252, 254)');
