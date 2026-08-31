@@ -30,7 +30,7 @@ jobs:
           grep -F 'aria-label="Cambiar de aplicación"' index.html
           grep -F 'href="https://josantoboy-debug.github.io/generador-pdt/"' index.html
           grep -F 'aria-current="page" href="https://josantoboy-debug.github.io/match-equipos/"' index.html
-          test "$(grep -o 'class="app-suite-link' index.html | wc -l)" -eq 2
+          test "$(grep -o '<a class="app-suite-link' index.html | wc -l)" -eq 2
           if grep -R -n 'document.write' --include='*.js' .; then
             echo 'document.write is not allowed'
             exit 1
