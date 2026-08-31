@@ -1,0 +1,188 @@
+name: Admin PIN reset gate
+
+on:
+  push:
+    branches:
+      - feature-admin-pin-reset-v2
+    paths:
+      - 'admin-reset-pin.html'
+      - 'admin-reset-pin.js'
+      - '.github/workflows/admin-pin-reset.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'admin-reset-pin.html'
+      - 'admin-reset-pin.js'
+      - '.github/workflows/admin-pin-reset.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  admin-pin-reset-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax and security checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check admin-reset-pin.js
+          grep -F 'admin-reset-pin.js?v=20260831-1' admin-reset-pin.html
+          grep -F 'core_admin_reset_pin_service' admin-reset-pin.js
+          grep -F 'core_operator_login_service' admin-reset-pin.js
+          grep -F 'core_logout_service' admin-reset-pin.js
+          grep -F 'sb_publishable_' admin-reset-pin.js
+          if grep -Eiq 'sb_secret_[A-Za-z0-9_-]{10,}' admin-reset-pin.html admin-reset-pin.js; then
+            echo 'Supabase secret key found in browser code'
+            exit 1
+          fi
+          if grep -Eiq 'service_role[[:space:]]*[:=]' admin-reset-pin.html admin-reset-pin.js; then
+            echo 'Service-role credential assignment found in browser code'
+            exit 1
+          fi
+          if grep -Eq 'localStorage|sessionStorage|document\.write' admin-reset-pin.js; then
+            echo 'Admin token must remain memory-only and document.write is forbidden'
+            exit 1
+          fi
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4176 --bind 127.0.0.1 > /tmp/admin-pin-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4176/admin-reset-pin.html >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/admin-pin-http.log
+          exit 1
+
+      - name: Desktop tablet mobile browser smoke
+        shell: bash
+        run: |
+          cat > /tmp/admin-pin-smoke.cjs <<'NODE'
+          const assert = require('assert');
+          const puppeteer = require(process.cwd() + '/node_modules/puppeteer-core');
+
+          const admin = {id:'00000000-0000-4000-8000-000000000001',name:'Usuario Admin',role:'admin',active:true,version:1};
+          const user = {id:'00000000-0000-4000-8000-000000000002',name:'Josue Parfait',role:'operator',active:true,version:1};
+          const TEST_ADMIN_PIN = '2468';
+          const TEST_NEW_PIN = '1357';
+          const TEST_TOKEN = 'TEST_ADMIN_TOKEN_NOT_REAL';
+          const viewports = [
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless:true,
+              executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome',
+              args:['--no-sandbox','--disable-setuid-sandbox']
+            });
+
+            for (const viewport of viewports) {
+              const page = await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const pageErrors=[];
+              const consoleErrors=[];
+              let resetPayload=null;
+              page.on('pageerror', error => pageErrors.push(String(error)));
+              page.on('console', msg => { if (msg.type()==='error') consoleErrors.push(msg.text()); });
+              page.on('dialog', dialog => dialog.accept());
+
+              await page.setRequestInterception(true);
+              page.on('request', request => {
+                const url=request.url();
+                if (!url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/rest/v1/rpc/')) return request.continue();
+                const headers={
+                  'access-control-allow-origin':'*',
+                  'access-control-allow-headers':'apikey,content-type',
+                  'access-control-allow-methods':'POST,OPTIONS'
+                };
+                if (request.method()==='OPTIONS') return request.respond({status:204,headers});
+                let body={};
+                try { body=JSON.parse(request.postData()||'{}'); } catch {}
+                if (url.endsWith('/core_list_operators_service')) {
+                  return request.respond({status:200,contentType:'application/json',headers,body:JSON.stringify({ok:true,bootstrapped:true,operators:[admin,user]})});
+                }
+                if (url.endsWith('/core_operator_login_service')) {
+                  const ok=body.p_operator_id===admin.id && body.p_pin===TEST_ADMIN_PIN && body.p_app_name==='admin';
+                  return request.respond({status:200,contentType:'application/json',headers,body:JSON.stringify(ok?{ok:true,token:TEST_TOKEN,expires_at:new Date(Date.now()+3600000).toISOString(),operator:admin}:{ok:false,code:'INVALID_PIN',remaining_attempts:4})});
+                }
+                if (url.endsWith('/core_admin_reset_pin_service')) {
+                  resetPayload=body;
+                  const ok=body.p_token===TEST_TOKEN && body.p_operator_id===user.id && body.p_new_pin===TEST_NEW_PIN;
+                  return request.respond({status:200,contentType:'application/json',headers,body:JSON.stringify(ok?{ok:true}:{ok:false,code:'FORBIDDEN'})});
+                }
+                if (url.endsWith('/core_logout_service')) {
+                  return request.respond({status:200,contentType:'application/json',headers,body:JSON.stringify({ok:true})});
+                }
+                return request.respond({status:404,contentType:'application/json',headers,body:'{}'});
+              });
+
+              await page.goto(`http://127.0.0.1:4176/admin-reset-pin.html?test=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(() => document.querySelector('#adminSelect')?.options.length===1,{timeout:5000});
+
+              let state=await page.evaluate(() => ({
+                adminOptions:document.querySelector('#adminSelect')?.options.length,
+                adminName:document.querySelector('#adminSelect')?.selectedOptions?.[0]?.textContent,
+                resetHidden:document.querySelector('#resetPanel')?.hidden,
+                tokenInLocal:localStorage.length,
+                tokenInSession:sessionStorage.length,
+                horizontalOverflow:document.documentElement.scrollWidth>innerWidth
+              }));
+              assert.deepStrictEqual(state,{adminOptions:1,adminName:'Usuario Admin',resetHidden:true,tokenInLocal:0,tokenInSession:0,horizontalOverflow:false});
+
+              await page.type('#adminPin',TEST_ADMIN_PIN);
+              await page.click('#adminLoginBtn');
+              await page.waitForFunction(() => document.querySelector('#resetPanel')?.hidden===false,{timeout:5000});
+
+              state=await page.evaluate(() => ({
+                admin:document.querySelector('#sessionAdminName')?.textContent,
+                targetCount:document.querySelector('#targetOperator')?.options.length,
+                resetEnabled:!document.querySelector('#resetPinBtn')?.disabled,
+                tokenInLocal:localStorage.length,
+                tokenInSession:sessionStorage.length
+              }));
+              assert.deepStrictEqual(state,{admin:'Usuario Admin',targetCount:2,resetEnabled:true,tokenInLocal:0,tokenInSession:0});
+
+              await page.select('#targetOperator',user.id);
+              await page.type('#newPin',TEST_NEW_PIN);
+              await page.type('#confirmPin',TEST_NEW_PIN);
+              await page.click('#resetPinBtn');
+              await page.waitForFunction(() => document.querySelector('#status')?.dataset.type==='success' && document.querySelector('#status')?.textContent.includes('Josue Parfait'),{timeout:5000});
+
+              assert.deepStrictEqual(resetPayload,{p_token:TEST_TOKEN,p_operator_id:user.id,p_new_pin:TEST_NEW_PIN});
+              const finalState=await page.evaluate(() => ({
+                newPin:document.querySelector('#newPin')?.value,
+                confirmPin:document.querySelector('#confirmPin')?.value,
+                tokenInDom:document.body.innerText.includes('TEST_ADMIN_TOKEN_NOT_REAL'),
+                horizontalOverflow:document.documentElement.scrollWidth>innerWidth
+              }));
+              assert.deepStrictEqual(finalState,{newPin:'',confirmPin:'',tokenInDom:false,horizontalOverflow:false});
+
+              const responsive=await Promise.race([
+                page.evaluate(() => new Promise(resolve => setTimeout(() => resolve('ok'),100))),
+                new Promise((_,reject) => setTimeout(() => reject(new Error('Browser event loop blocked')),2000))
+              ]);
+              assert.strictEqual(responsive,'ok');
+              assert.deepStrictEqual(pageErrors,[]);
+              assert.deepStrictEqual(consoleErrors,[]);
+              await page.close();
+            }
+
+            await browser.close();
+            console.log('ADMIN_PIN_RESET_GATE_OK');
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
+          node /tmp/admin-pin-smoke.cjs
