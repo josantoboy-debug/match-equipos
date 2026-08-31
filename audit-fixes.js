@@ -4,6 +4,7 @@
   const $ = selector => document.querySelector(selector);
   const MAX_PER_BOX = 64;
   const THEME_ASSET_VERSION = '20260831-light2';
+  const TTS_ASSET_VERSION = '20260831-critical2';
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
@@ -33,17 +34,31 @@
     if (!document.querySelector('link[data-tts-control]')) {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = 'tts-control.css?v=8c72993';
+      link.href = `tts-control.css?v=${TTS_ASSET_VERSION}`;
       link.dataset.ttsControl = '1';
       document.head.appendChild(link);
     }
     if (window.AppTTS || document.querySelector('script[data-tts-control]')) return;
     const script = document.createElement('script');
-    script.src = 'tts-control.js?v=20260830-stable1';
+    script.src = `tts-control.js?v=${TTS_ASSET_VERSION}`;
     script.dataset.ttsControl = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-control.js');
     document.head.appendChild(script);
+  }
+
+  function loadCriticalWarnings() {
+    if (window.MatchCriticalWarnings || document.querySelector('script[data-critical-tts]')) {
+      window.MatchCriticalWarnings?.bind?.();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = `tts-critical-warnings.js?v=${TTS_ASSET_VERSION}`;
+    script.dataset.criticalTts = '1';
+    script.async = false;
+    script.onload = () => window.MatchCriticalWarnings?.bind?.();
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-critical-warnings.js');
+    document.body.appendChild(script);
   }
 
   function restoreNativeAnchorClick() {
@@ -110,7 +125,10 @@
     script.src = 'equipment-new-session.js?v=ccf3874';
     script.dataset.equipmentNewSession = '1';
     script.async = false;
-    script.onload = () => window.EquipmentNewSession?.install?.();
+    script.onload = () => {
+      window.EquipmentNewSession?.install?.();
+      loadCriticalWarnings();
+    };
     script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-new-session.js');
     document.body.appendChild(script);
   }
@@ -164,6 +182,7 @@
     guardQuantity();
     loadExportSummary();
     loadEquipmentNewSession();
+    loadCriticalWarnings();
     loadEquipmentProcessHistory();
     loadEquipmentImportContext();
     setTimeout(healthCheck, 0);
@@ -176,6 +195,7 @@
     guardQuantity();
     loadExportSummary();
     loadEquipmentNewSession();
+    loadCriticalWarnings();
     loadEquipmentProcessHistory();
     loadEquipmentImportContext();
     setTimeout(healthCheck, 0);
@@ -186,6 +206,7 @@
     healthCheck,
     loadThemeControl,
     loadTTSControl,
+    loadCriticalWarnings,
     loadExportSummary,
     loadEquipmentNewSession,
     loadEquipmentProcessHistory,
