@@ -1,0 +1,222 @@
+name: Cross match search gate
+
+on:
+  push:
+    branches:
+      - repair/cross-match-search-20260831
+      - main
+    paths:
+      - index.html
+      - search-mode.js
+      - match-cross-contract.js
+      - match-cross-search.js
+      - match-cross-search.css
+      - .github/workflows/cross-match-search-gate.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - index.html
+      - search-mode.js
+      - match-cross-contract.js
+      - match-cross-search.js
+      - match-cross-search.css
+      - .github/workflows/cross-match-search-gate.yml
+
+permissions:
+  contents: read
+
+jobs:
+  cross-match-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax and references
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F 'data-cross-match-version="20260831-crossmatch1"' index.html
+          grep -F 'match-cross-contract.js?v=20260831-crossmatch1' index.html
+          grep -F 'match-cross-search.js?v=20260831-crossmatch1' index.html
+          grep -F 'match-cross-search.css?v=20260831-crossmatch1' index.html
+          grep -F 'search-mode.js?v=20260831-autoclear3-crossmatch1' index.html
+          grep -F 'crossMatchFolderInput' index.html
+          test -s match-cross-contract.js
+          test -s match-cross-search.js
+          test -s match-cross-search.css
+          ! grep -R 'document\.write' match-cross-contract.js match-cross-search.js search-mode.js
+
+      - name: Contract matching tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const assert=require('assert');
+          const C=require('./match-cross-contract.js');
+          assert.strictEqual(C.canonicalCode('000-01174-04427-010'),'117404427010');
+          assert.strictEqual(C.canonicalCode('0000117404427010'),'117404427010');
+          assert.strictEqual(C.classifyCode('000-01174-04427-010'),'CARCASA');
+          assert.strictEqual(C.classifyCode('M91504EQL152'),'EQUIPO');
+          const wb=C.parseWorkbookModel('Equipos_macth.xlsx',[
+            {name:'Equipos sin carcasa',rows:[['SR','UA'],['M91504EQL152','000-01174-04427-010'],['MV2022VR3097','0000181679117166']]},
+            {name:'Carcasa equipos',rows:[['SR','UA'],['M91845ERCL12','0000180129859246']]},
+            {name:'Equipos encontrados',rows:[['SR','UA'],['M91610EQT635','000-01184-70692-234']]},
+            {name:'Equipos totales',rows:[['SR','UA']]}
+          ]);
+          assert.strictEqual(wb.records.length,4);
+          assert.strictEqual(wb.records[0].role,'EQUIPO');
+          assert.strictEqual(wb.records[2].role,'CARCASA');
+          const a=C.parseTxt('000-01174-04427-010\tM91504EQL152\n000-01816-79117-166\tMV2022VR3097','DATA_08_DCX525.txt');
+          const b=C.parseTxt('0000117404427010\tM91504EQL152\nBADLINE','DATA_09.txt');
+          assert.strictEqual(b.errors.length,1);
+          let r=C.search('M91504EQL152',wb.records,[...a.records,...b.records]);
+          assert.strictEqual(r.excelHits.length,1);
+          assert.strictEqual(r.txtHits.length,2);
+          assert.strictEqual(r.links.length,2);
+          assert.ok(r.links.every(x=>x.exactPair));
+          r=C.search('0000117404427010',wb.records,a.records);
+          assert.strictEqual(r.links[0].excel.sheet,'Equipos sin carcasa');
+          assert.strictEqual(r.links[0].excel.rowNumber,2);
+          assert.strictEqual(r.links[0].txt.lineNumber,1);
+          r=C.search('11740442',wb.records,a.records);
+          assert.ok(r.links.length===1);
+          r=C.search('EQL152',wb.records,a.records);
+          assert.ok(r.excelHits.length===1&&r.txtHits.length===1);
+          r=C.search('NOEXISTE123',wb.records,a.records);
+          assert.strictEqual(r.total,0);
+          console.log('CROSS_MATCH_CONTRACT_OK exact=ok partial=ok multi_txt=ok leading_zeros=ok errors=ok');
+          NODE
+
+      - name: Install browser dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local app
+        shell: bash
+        run: |
+          python3 -m http.server 4178 --bind 127.0.0.1 >/tmp/crossmatch-http.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4178/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/crossmatch-http.log
+          exit 1
+
+      - name: Browser smoke desktop tablet mobile and stale cache
+        shell: bash
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: |
+          cat >/tmp/crossmatch-browser.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const VERSION='20260831-crossmatch1';
+          const cors={
+            'access-control-allow-origin':'*',
+            'access-control-allow-headers':'apikey,content-type,authorization,x-client-info,prefer',
+            'access-control-allow-methods':'POST,OPTIONS,GET'
+          };
+          async function run(browser,name,width,height,stale=false){
+            const page=await browser.newPage();
+            await page.setViewport({width,height,deviceScaleFactor:1});
+            const errors=[],requests=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.setRequestInterception(true);
+            page.on('request',req=>{
+              const u=req.url(); requests.push(u);
+              if(stale&&u.includes(`match-cross-search.css?v=${VERSION}`)) return req.respond({status:200,contentType:'text/css',body:'.cross-match-source-box{display:block}.cross-match-grid{display:grid}'});
+              if(/^https:\/\/cdn\.sheetjs\.com/.test(u)) return req.respond({status:200,contentType:'application/javascript',headers:{'access-control-allow-origin':'*'},body:'window.XLSX=window.XLSX||{};'});
+              if(u.includes('yvlayxmhcngdqribcmkh.supabase.co')){
+                if(req.method()==='OPTIONS') return req.respond({status:204,headers:cors,body:''});
+                if(u.includes('core_list_operators_service')) return req.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true,"bootstrapped":true,"operators":[]}'});
+                return req.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true}'});
+              }
+              req.continue();
+            });
+            await page.goto(`http://127.0.0.1:4178/?cross=${name}`,{waitUntil:'domcontentloaded',timeout:20000});
+            await page.waitForFunction(()=>window.MatchCrossSearch&&window.MatchSearchModes&&document.querySelector('#operatorLock'),{timeout:10000});
+            const lock=await page.$eval('#operatorLock',el=>({display:getComputedStyle(el).display,visible:el.getBoundingClientRect().height>0}));
+            assert.ok(lock.display!=='none'&&lock.visible,`${name}: login lock not visible`);
+            assert.ok(await page.$('#operatorSelect'),`${name}: operator selector missing`);
+            await page.evaluate(()=>{const lock=document.querySelector('#operatorLock');if(lock)lock.style.display='none';document.querySelector('main.app')?.removeAttribute('inert');});
+            await page.evaluate(()=>{
+              MatchCrossSearch.ingestWorkbookModel('Equipos_macth.xlsx',[
+                {name:'Equipos sin carcasa',rows:[['SR','UA'],['M91504EQL152','000-01174-04427-010']]},
+                {name:'Carcasa equipos',rows:[['SR','UA'],['M91845ERCL12','0000180129859246']]}
+              ]);
+              MatchCrossSearch.ingestTxtText('DATA_08_DCX525.txt','000-01174-04427-010\tM91504EQL152\n000-01801-29859-246\tM91845ERCL12');
+              MatchCrossSearch.ingestTxtText('DATA_09.txt','0000117404427010\tM91504EQL152');
+              const input=document.querySelector('#searchInput');input.value='M91504EQL152';MatchSearchModes.executeSearch();
+            });
+            const exact=await page.$$eval('.cross-match-card.exact',els=>els.length);
+            assert.strictEqual(exact,2,`${name}: expected two exact cross-source hits`);
+            const text=await page.$eval('.cross-match-section',el=>el.textContent);
+            assert.ok(text.includes('Equipos sin carcasa')&&text.includes('fila 2')&&text.includes('línea 1'),`${name}: traceability missing`);
+            const stats=await page.evaluate(()=>MatchCrossSearch.getStats());
+            assert.deepStrictEqual(stats,{excelFile:'Equipos_macth.xlsx',excelRecords:2,txtFiles:2,txtRecords:3,errors:0});
+            await page.evaluate(()=>{const i=document.querySelector('#searchInput');i.value='11740442';MatchSearchModes.executeSearch();});
+            assert.ok((await page.$$eval('.cross-match-card',els=>els.length))>=2,`${name}: partial query failed`);
+            await page.evaluate(()=>{const i=document.querySelector('#searchInput');i.value='NOEXISTE123';MatchSearchModes.executeSearch();});
+            assert.ok(await page.$('.cross-match-empty'),`${name}: no-match message missing`);
+            const geom=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth,box:document.querySelector('.cross-match-source-box').getBoundingClientRect().width,panel:document.querySelector('.search-panel').getBoundingClientRect().width}));
+            assert.ok(geom.scroll<=geom.width+1,`${name}: horizontal overflow ${geom.scroll}/${geom.width}`);
+            assert.ok(geom.box>0&&geom.box<=geom.panel+1,`${name}: source box overflow`);
+            assert.ok(requests.some(u=>u.includes(`match-cross-contract.js?v=${VERSION}`)));
+            assert.ok(requests.some(u=>u.includes(`match-cross-search.js?v=${VERSION}`)));
+            assert.ok(requests.some(u=>u.includes('search-mode.js?v=20260831-autoclear3-crossmatch1')));
+            await Promise.race([page.evaluate(()=>new Promise(r=>setTimeout(r,100))),new Promise((_,rej)=>setTimeout(()=>rej(new Error(`${name}: event loop blocked`)),2000))]);
+            assert.deepStrictEqual(errors,[],`${name}: console/page errors ${JSON.stringify(errors)}`);
+            console.log(`CROSS_MATCH_${name.toUpperCase()}_OK exact=${exact} txt=${stats.txtFiles} overflow=none stale=${stale}`);
+            await page.close();
+          }
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN,args:['--no-sandbox','--disable-setuid-sandbox']});
+            await run(browser,'desktop',1536,864,false);
+            await run(browser,'tablet',820,1180,false);
+            await run(browser,'mobile',390,844,false);
+            await run(browser,'mobile-stale',390,844,true);
+            await browser.close();
+            console.log('CROSS_MATCH_BROWSER_GATE_OK');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node /tmp/crossmatch-browser.cjs
+
+  verify-public-cross-match:
+    if: github.ref == 'refs/heads/main'
+    needs: cross-match-search
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for public cross-match version
+        shell: bash
+        env:
+          PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
+        run: |
+          set -uo pipefail
+          ok=0
+          for attempt in {1..36}; do
+            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?crossmatch=${nonce}" || true)
+            if [ "$code" = 200 ] \
+              && grep -F 'data-cross-match-version="20260831-crossmatch1"' /tmp/live.html >/dev/null \
+              && grep -F 'match-cross-contract.js?v=20260831-crossmatch1' /tmp/live.html >/dev/null \
+              && grep -F 'match-cross-search.js?v=20260831-crossmatch1' /tmp/live.html >/dev/null \
+              && grep -F 'search-mode.js?v=20260831-autoclear3-crossmatch1' /tmp/live.html >/dev/null; then
+              js1=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -o /tmp/contract.js -w '%{http_code}' "${PUBLIC_URL}match-cross-contract.js?v=20260831-crossmatch1&verify=${nonce}" || true)
+              js2=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -o /tmp/search.js -w '%{http_code}' "${PUBLIC_URL}match-cross-search.js?v=20260831-crossmatch1&verify=${nonce}" || true)
+              css=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -o /tmp/cross.css -w '%{http_code}' "${PUBLIC_URL}match-cross-search.css?v=20260831-crossmatch1&verify=${nonce}" || true)
+              if [ "$js1" = 200 ] && [ "$js2" = 200 ] && [ "$css" = 200 ] \
+                && grep -F "const VERSION='20260831-crossmatch1'" /tmp/search.js >/dev/null \
+                && grep -F 'canonicalCode' /tmp/contract.js >/dev/null \
+                && grep -F 'cross-match-source-box' /tmp/cross.css >/dev/null; then
+                echo "CROSS_MATCH_PUBLIC_OK url=${PUBLIC_URL} http=${code} version=20260831-crossmatch1"
+                ok=1; break
+              fi
+            fi
+            echo "Attempt ${attempt}: public cross-match version not ready; retrying"
+            sleep 5
+          done
+          test "$ok" = 1
