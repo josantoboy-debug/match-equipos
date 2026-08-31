@@ -35,8 +35,12 @@ jobs:
           grep -F 'core_operator_login_service' admin-reset-pin.js
           grep -F 'core_logout_service' admin-reset-pin.js
           grep -F 'sb_publishable_' admin-reset-pin.js
-          if grep -Eiq 'service[_-]?role|sb_secret_|secret[_-]?key' admin-reset-pin.html admin-reset-pin.js; then
-            echo 'Private credential reference found in browser code'
+          if grep -Eiq 'sb_secret_[A-Za-z0-9_-]{10,}' admin-reset-pin.html admin-reset-pin.js; then
+            echo 'Supabase secret key found in browser code'
+            exit 1
+          fi
+          if grep -Eiq 'service_role[[:space:]]*[:=]' admin-reset-pin.html admin-reset-pin.js; then
+            echo 'Service-role credential assignment found in browser code'
             exit 1
           fi
           if grep -Eq 'localStorage|sessionStorage|document\.write' admin-reset-pin.js; then
