@@ -58,8 +58,10 @@ jobs:
 
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}match-data-contract.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/contract.js || return 1
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js || return 1
-            grep -F 'MatchDataContract' /tmp/contract.js >/dev/null || return 1
-            grep -F 'MatchEquiposCore' /tmp/app.js >/dev/null || return 1
+            grep -F 'window.MatchDataContract' /tmp/contract.js >/dev/null || return 1
+            grep -F 'const Contract = window.MatchDataContract;' /tmp/app.js >/dev/null || return 1
+            grep -F 'findCounterpart' /tmp/app.js >/dev/null || return 1
+            grep -F 'carcasa.host!==equipo.host || carcasa.uaNorm!==equipo.uaNorm' /tmp/app.js >/dev/null || return 1
 
             theme_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/theme.css -w '%{http_code}' "${PUBLIC_URL}theme-control.css?v=${EXPECTED_THEME}&verify=${nonce}" || true)
             [ "$theme_code" = "200" ] || return 1
@@ -72,8 +74,10 @@ jobs:
             grep -F 'Administración de PIN' /tmp/admin-reset.html >/dev/null || return 1
             grep -F "admin-reset-pin.js?v=${EXPECTED_ADMIN_VERSION}" /tmp/admin-reset.html >/dev/null || return 1
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}admin-reset-pin.js?v=${EXPECTED_ADMIN_VERSION}&verify=${nonce}" -o /tmp/admin-reset.js || return 1
-            grep -F 'core_admin_reset_pin_service' /tmp/admin-reset.js >/dev/null || return 1
-            grep -F 'core_operator_login_service' /tmp/admin-reset.js >/dev/null || return 1
+            grep -F 'functions/v1/operator-api' /tmp/admin-reset.js >/dev/null || return 1
+            grep -F "api('login'" /tmp/admin-reset.js >/dev/null || return 1
+            grep -F "api('reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
+            grep -F "api('emergency_reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
 
             echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=${code} build=${EXPECTED_BUILD} theme_http=${theme_code} theme=${EXPECTED_THEME} admin_http=${admin_code} admin_version=${EXPECTED_ADMIN_VERSION}"
             return 0
