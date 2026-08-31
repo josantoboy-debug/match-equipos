@@ -1,0 +1,75 @@
+name: Selective TTS policy gate
+
+on:
+  push:
+    branches:
+      - repair/tts-default-off-20260831
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tts-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do node --check "$file"; done < <(find . -maxdepth 1 -name '*.js' -print0)
+
+      - name: Validate selective TTS defaults and classification
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const assert = require('assert');
+          let spoken = [];
+          global.Event = class Event { constructor(type){ this.type=type; } };
+          global.MutationObserver = class { observe(){} disconnect(){} };
+          global.document = {
+            readyState:'loading',
+            querySelector(){ return null; },
+            querySelectorAll(){ return []; },
+            addEventListener(){},
+            documentElement:{dataset:{}}
+          };
+          const nativeSpeak = utterance => spoken.push(String(utterance?.text || ''));
+          global.window = {
+            speechSynthesis:{speak:nativeSpeak,cancel(){},getVoices(){return[];}},
+            MatchVoiceTTS:{setEnabled(){}}
+          };
+          require('./tts-control.js');
+          const api = window.AppTTS;
+          assert(api, 'AppTTS no se publicó');
+          assert.deepStrictEqual(api.getPreference(), {welcome:false,criticalWarnings:true,alerts:false});
+          assert.strictEqual(api.isCriticalWarning('Atención. Dispositivo duplicado.'), true);
+          assert.strictEqual(api.isCriticalWarning('HOST SN INVÁLIDO. Debe comenzar con M.'), true);
+          assert.strictEqual(api.isCriticalWarning('UA inválido. Debe tener 16 dígitos.'), true);
+          assert.strictEqual(api.isCriticalWarning('Equipo registrado correctamente.'), false);
+          assert.strictEqual(api.isCriticalWarning('Caja lista para imprimir.'), false);
+          window.speechSynthesis.speak({text:'Bienvenido, Operador'});
+          window.speechSynthesis.speak({text:'Equipo registrado correctamente.'});
+          window.speechSynthesis.speak({text:'Precaución. Dispositivo duplicado.'});
+          window.speechSynthesis.speak({text:'Error en código U A. U A inválido.'});
+          window.speechSynthesis.speak({text:'Error en código Serial. Host S N inválido.'});
+          assert.strictEqual(spoken.length, 3, `Se esperaban solo 3 advertencias críticas, se hablaron ${spoken.length}`);
+          console.log('MATCH_TTS_POLICY_OK', api.version, api.getPreference(), spoken);
+          NODE
+
+      - name: Validate cache-busted loader and controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "const TTS_ASSET_VERSION = '20260831-critical1'" audit-fixes.js
+          grep -F 'tts-control.css?v=${TTS_ASSET_VERSION}' audit-fixes.js
+          grep -F 'tts-control.js?v=${TTS_ASSET_VERSION}' audit-fixes.js
+          grep -F 'data-tts-setting="criticalWarnings"' tts-control.js
+          grep -F 'Duplicado · UA · Serial' tts-control.js
+          ! grep -F "DEFAULTS = Object.freeze({welcome:false, alerts:true})" tts-control.js
