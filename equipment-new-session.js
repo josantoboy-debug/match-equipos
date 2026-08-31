@@ -166,6 +166,9 @@
     resetFields();
     window.OperatorSession?.saveNow?.();
     updateRecoverButton();
+    document.dispatchEvent(new CustomEvent('equipment:new-session-created', {
+      detail:{operator:operator(), source:'equipment-register'}
+    }));
     toast('Nueva sesión',backup ? 'Registro reiniciado. La sesión anterior quedó guardada para recuperación.' : 'Registro reiniciado.','ok');
   }
 
