@@ -1,0 +1,189 @@
+name: UNITCHECK branding gate
+
+on:
+  push:
+    branches:
+      - main
+      - repair/unitcheck-brand-20260831
+    paths:
+      - 'index.html'
+      - 'unitcheck-brand.css'
+      - 'assets/unitcheck-logo.webp'
+      - 'favicon.ico'
+      - '.github/workflows/unitcheck-brand-gate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'unitcheck-brand.css'
+      - 'assets/unitcheck-logo.webp'
+      - 'favicon.ico'
+      - '.github/workflows/unitcheck-brand-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  branding-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRAND='20260831-unitcheck1'
+          for file in *.js; do node --check "$file"; done
+          grep -F "data-brand-version=\"${BRAND}\"" index.html
+          grep -F '<title>UNITCHECK</title>' index.html
+          grep -F "unitcheck-brand.css?v=${BRAND}" index.html
+          grep -F "assets/unitcheck-logo.webp?v=${BRAND}" index.html
+          grep -F '.unitcheck-subtitle{display:none!important}' unitcheck-brand.css
+          grep -F 'content:"UNITCHECK"' unitcheck-brand.css
+          grep -F 'width:42px' unitcheck-brand.css
+          ! grep -F '<div class="brand-mark">M</div>' index.html
+          ! grep -F '<h1>REGISTRO Y VERIFICACION</h1>' index.html
+          test -s assets/unitcheck-logo.webp
+          test -s favicon.ico
+          size=$(stat -c%s assets/unitcheck-logo.webp)
+          test "$size" -ge 5000
+          test "$size" -le 100000
+          file assets/unitcheck-logo.webp | grep -Ei 'Web/P|WebP'
+
+      - name: Install browser dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local app
+        run: |
+          python3 -m http.server 4176 --bind 127.0.0.1 >/tmp/unitcheck-http.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4176/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/unitcheck-http.log
+          exit 1
+
+      - name: Responsive branding smoke
+        shell: bash
+        run: |
+          cat >/tmp/unitcheck-smoke.cjs <<'NODE'
+          const assert=require('assert');
+          const fs=require('fs');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const BRAND='20260831-unitcheck1';
+          const staleCss=fs.readFileSync('styles.css','utf8');
+          const views=[['desktop',1536,864,125],['tablet',820,1180,185],['mobile',390,844,245]];
+          const cors={
+            'access-control-allow-origin':'*',
+            'access-control-allow-headers':'apikey,content-type,authorization,x-client-info,prefer',
+            'access-control-allow-methods':'POST,OPTIONS,GET'
+          };
+          const overlap=(a,b)=>Math.max(0,Math.min(a.right,b.right)-Math.max(a.left,b.left))*Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+
+          async function test(page,name,w,h,maxHeader,stale=false){
+            await page.setViewport({width:w,height:h,deviceScaleFactor:1});
+            await page.setCacheEnabled(!stale);
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.setRequestInterception(true);
+            page.on('request',r=>{
+              const u=r.url();
+              if(stale&&/\/styles\.css\?v=f7caa1f/.test(u)) return r.respond({status:200,contentType:'text/css',headers:{'cache-control':'public,max-age=31536000'},body:staleCss});
+              if(u.includes('/rpc/core_list_operators_service')){
+                if(r.method()==='OPTIONS') return r.respond({status:204,headers:cors,body:''});
+                return r.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true,"bootstrapped":true,"operators":[]}'});
+              }
+              if(/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(u)) return r.respond({status:200,contentType:'application/javascript',headers:{'access-control-allow-origin':'*'},body:'window.XLSX=window.XLSX||{};'});
+              if(u.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')){
+                if(r.method()==='OPTIONS') return r.respond({status:204,headers:cors,body:''});
+                return r.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true}'});
+              }
+              r.continue();
+            });
+
+            await page.goto(`http://127.0.0.1:4176/?brand=${name}`,{waitUntil:'domcontentloaded',timeout:15000});
+            await page.waitForFunction(()=>{const i=document.querySelector('.unitcheck-logo');return i?.complete&&i.naturalWidth>0},{timeout:5000});
+            const s=await page.evaluate(BRAND=>{
+              document.documentElement.dataset.theme='light';
+              const lock=document.querySelector('#operatorLock'); if(lock) lock.style.display='none';
+              document.querySelector('main.app')?.removeAttribute('inert');
+              const a=document.querySelector('.top-actions');
+              if(a) a.innerHTML='<span class="operator-chip" style="min-width:190px;min-height:40px;display:flex;align-items:center;padding:6px 10px">OPERADOR · Prueba</span><button class="ghost danger" style="min-height:40px;padding:8px 12px">Cerrar sesión</button>';
+              const r=e=>{const x=e.getBoundingClientRect();return{left:x.left,right:x.right,top:x.top,bottom:x.bottom,width:x.width,height:x.height}};
+              const brand=document.querySelector('.unitcheck-brand'),stack=document.querySelector('.unitcheck-brand-stack'),nav=document.querySelector('.app-suite-nav'),actions=document.querySelector('.top-actions'),header=document.querySelector('.topbar'),main=document.querySelector('main.app'),logo=document.querySelector('.unitcheck-logo'),sub=document.querySelector('.unitcheck-subtitle'),frame=document.querySelector('.unitcheck-logo-frame');
+              return {title:document.title,v:document.documentElement.dataset.brandVersion,bv:brand?.dataset.brandVersion,src:logo?.getAttribute('src'),ratio:logo.naturalWidth/logo.naturalHeight,fit:getComputedStyle(logo).objectFit,subHidden:!sub||getComputedStyle(sub).display==='none'||r(sub).height===0,pseudo:getComputedStyle(stack,'::after').content,frame:r(frame),header:r(header),brand:r(brand),nav:r(nav),actions:r(actions),main:r(main),scroll:document.documentElement.scrollWidth,width:innerWidth,register:r(document.querySelector('.register-panel')).width,search:r(document.querySelector('.search-panel')).width,equipment:r(document.querySelector('#equipmentRegisterPanel')).width};
+            },BRAND);
+            assert.strictEqual(s.title,'UNITCHECK');
+            assert.strictEqual(s.v,BRAND);
+            assert.strictEqual(s.bv,BRAND);
+            assert.strictEqual(s.subHidden,true);
+            assert.ok(s.pseudo.includes('UNITCHECK'));
+            assert.match(s.src,new RegExp(`assets/unitcheck-logo\\.webp\\?v=${BRAND}`));
+            assert.ok(s.ratio>2.9&&s.ratio<3.2);
+            assert.strictEqual(s.fit,'contain');
+            assert.ok(s.frame.width>=36&&s.frame.width<=44,`${name}: icon width ${s.frame.width}`);
+            assert.ok(s.scroll<=s.width+1,`${name}: horizontal overflow ${s.scroll}/${s.width}`);
+            assert.ok(s.header.height<=maxHeader,`${name}: header too tall ${s.header.height}`);
+            assert.ok(s.main.top>=s.header.bottom-1,`${name}: main covered by header`);
+            assert.ok(s.register>0&&s.search>0&&s.equipment>0);
+            assert.strictEqual(overlap(s.brand,s.nav),0,`${name}: brand/nav overlap`);
+            assert.strictEqual(overlap(s.brand,s.actions),0,`${name}: brand/actions overlap`);
+            assert.strictEqual(overlap(s.nav,s.actions),0,`${name}: nav/actions overlap`);
+            await Promise.race([page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,100))),new Promise((_,reject)=>setTimeout(()=>reject(new Error(`${name}: event loop blocked`)),2000))]);
+            assert.deepStrictEqual(errors,[]);
+            console.log(`UNITCHECK_${name.toUpperCase()}_OK header=${s.header.height.toFixed(1)} icon=${s.frame.width.toFixed(1)}`);
+          }
+
+          (async()=>{
+            const b=await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',args:['--no-sandbox','--disable-setuid-sandbox']});
+            for(const [n,w,h,m] of views){const p=await b.newPage();await test(p,n,w,h,m,false);await p.close();}
+            const p=await b.newPage();await test(p,'mobile-stale',390,844,245,true);await p.close();
+            await b.close();
+            console.log('UNITCHECK_BRAND_GATE_OK');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node /tmp/unitcheck-smoke.cjs
+
+  verify-public-brand:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for UNITCHECK on public GitHub Pages
+        shell: bash
+        env:
+          PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
+        run: |
+          set -uo pipefail
+          BRAND='20260831-unitcheck1'
+          ok=0
+          for attempt in {1..36}; do
+            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?unitcheck=${nonce}" || true)
+            if [ "$code" = '200' ] \
+              && grep -F "data-brand-version=\"${BRAND}\"" /tmp/live.html >/dev/null \
+              && grep -F '<title>UNITCHECK</title>' /tmp/live.html >/dev/null \
+              && grep -F "unitcheck-brand.css?v=${BRAND}" /tmp/live.html >/dev/null \
+              && grep -F "assets/unitcheck-logo.webp?v=${BRAND}" /tmp/live.html >/dev/null; then
+              css_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/unitcheck.css -w '%{http_code}' "${PUBLIC_URL}unitcheck-brand.css?v=${BRAND}&verify=${nonce}" || true)
+              logo_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/unitcheck.webp -w '%{http_code}' "${PUBLIC_URL}assets/unitcheck-logo.webp?v=${BRAND}&verify=${nonce}" || true)
+              favicon_code=$(curl -sS -L --max-time 15 -o /tmp/favicon.ico -w '%{http_code}' "${PUBLIC_URL}favicon.ico?verify=${nonce}" || true)
+              if [ "$css_code" = '200' ] && [ "$logo_code" = '200' ] && [ "$favicon_code" = '200' ] \
+                && grep -F '.unitcheck-subtitle{display:none!important}' /tmp/unitcheck.css >/dev/null \
+                && grep -F 'content:"UNITCHECK"' /tmp/unitcheck.css >/dev/null \
+                && [ "$(stat -c%s /tmp/unitcheck.webp)" -ge 5000 ] \
+                && file /tmp/unitcheck.webp | grep -Ei 'Web/P|WebP' >/dev/null; then
+                echo "UNITCHECK_PUBLIC_OK url=${PUBLIC_URL} http=${code} brand=${BRAND} logo_bytes=$(stat -c%s /tmp/unitcheck.webp)"
+                ok=1
+                break
+              fi
+            fi
+            echo "Attempt ${attempt}: UNITCHECK public deployment not ready; retrying"
+            sleep 5
+          done
+          test "$ok" = '1'
