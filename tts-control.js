@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const POLICY_VERSION = '20260831-critical1';
+  const POLICY_VERSION = '20260831-critical2';
   const STORAGE_PREFIX = 'matchEquipos.ttsPreference.v3';
   const OPERATOR_STORE_KEY = 'matchEquipos.operatorAccess.v1';
   const DEFAULTS = Object.freeze({welcome:false, criticalWarnings:true, alerts:false});
@@ -65,13 +65,25 @@
   function isCriticalWarning(text) {
     const value = normalizeSpeechText(text);
     if (!value) return false;
+
+    // 1) Dispositivo / registro duplicado.
     if (/duplicad|dispositivo repetid|ya existe/.test(value)) return true;
 
+    // 2) Error en código UA o Serial / Host SN.
     const uaMention = /\bu\s*a\b|unit address/.test(value);
     const serialMention = /serial|host\s*s\s*n|host sn|\bs\s*n\b/.test(value);
-    const errorSignal = /invalid|incorrect|error|no coincide|no valido|formato|debe iniciar|debe comenzar|incomplet|longitud/.test(value);
+    const codeError = /invalid|incorrect|error|no valido|formato|debe iniciar|debe comenzar|debe tener|incomplet|longitud|fuera del formato/.test(value);
+    if (codeError && (uaMention || serialMention)) return true;
+    if (/host sn ya registrado con otro ua/.test(value)) return true;
 
-    return errorSignal && (uaMention || serialMention);
+    // 3) No Match de dispositivos: discrepancia o contraparte aún no encontrada.
+    if (/no coincide|no se creo match|no se encontro todavia|no se encontro aun|match pendiente|revisar ua/.test(value)) return true;
+    if (/serial.*otra ua|ua.*otro serial|mismo host.*ua diferente/.test(value)) return true;
+
+    // 4) Precaución antes de iniciar otra sesión.
+    if (/ya guardaste|asegurate de (guardar|exportar)|antes de .*nueva sesion|antes de .*otra sesion/.test(value)) return true;
+
+    return false;
   }
 
   function completeSuppressedUtterance(utterance) {
@@ -153,7 +165,7 @@
       if (state) state.textContent = active ? 'ON' : 'OFF';
     });
     const support = $('#operatorVoiceSupport');
-    if (support) support.textContent = 'speechSynthesis' in window ? 'Voz del navegador' : 'TTS no disponible';
+    if (support) support.textContent = 'speechSynthesis' in window ? 'Precauciones críticas por voz' : 'TTS no disponible';
     document.documentElement.dataset.ttsPolicyVersion = POLICY_VERSION;
   }
 
@@ -170,7 +182,7 @@
         <div class="operator-voice-head"><span>VOZ TTS</span><small id="operatorVoiceSupport"></small></div>
         <div class="operator-voice-options">
           <button type="button" data-tts-setting="criticalWarnings" aria-pressed="true">
-            <span class="voice-icon" aria-hidden="true">⚠️</span><span><strong>Precauciones</strong><small>Duplicado · UA · Serial</small></span><b data-tts-state>ON</b>
+            <span class="voice-icon" aria-hidden="true">⚠️</span><span><strong>Precauciones</strong><small>Duplicado · códigos · no Match · nueva sesión</small></span><b data-tts-state>ON</b>
           </button>
           <button type="button" data-tts-setting="welcome" aria-pressed="false">
             <span class="voice-icon" aria-hidden="true">👋</span><span><strong>Bienvenida</strong><small>Al iniciar sesión</small></span><b data-tts-state>OFF</b>
