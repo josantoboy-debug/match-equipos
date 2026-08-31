@@ -1,0 +1,202 @@
+name: Match data contract gate
+
+on:
+  push:
+    branches:
+      - fix/match-excel-txt-location-20260831
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'match-data-contract.js'
+      - 'search-mode.js'
+      - 'file-index.js'
+      - '.github/workflows/match-data-contract-gate.yml'
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  match-data-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JavaScript syntax and asset references
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F 'data-build="20260831-matchlocation1"' index.html
+          grep -F 'match-data-contract.js?v=20260831-matchlocation1' index.html
+          grep -F 'app.js?v=20260831-matchlocation1' index.html
+          grep -F 'id="locationImportBtn"' index.html
+          grep -F 'id="locationFileInput"' index.html
+          grep -F 'id="locationSourceStatus"' index.html
+          contract_line=$(grep -n 'match-data-contract.js?v=20260831-matchlocation1' index.html | head -1 | cut -d: -f1)
+          app_line=$(grep -n 'app.js?v=20260831-matchlocation1' index.html | head -1 | cut -d: -f1)
+          test "$contract_line" -lt "$app_line"
+          for ref in $(grep -Eo '(src|href)="[^"?#]+\.(js|css)' index.html | sed -E 's/^(src|href)="//'); do
+            case "$ref" in
+              http://*|https://*|//*) continue ;;
+            esac
+            test -f "$ref" || { echo "Missing referenced asset: $ref"; exit 1; }
+          done
+
+      - name: Exact Match and TXT parser contract
+        shell: bash
+        run: |
+          node <<'NODE'
+          const assert=require('assert');
+          const c=require('./match-data-contract.js');
+
+          assert.strictEqual(c.coerceUA('121209759142'),'0000121209759142');
+          assert.strictEqual(c.coerceUA('000-01212-09759-142'),'0000121209759142');
+          assert.strictEqual(c.validHost('M91620EQ7139').valid,true);
+          assert.strictEqual(c.validUA('0000121209759142').valid,true);
+
+          assert.strictEqual(c.exactPair(
+            {host:'M91620EQ7139',ua:'0000121209759142'},
+            {host:'M91620EQ7139',ua:'000-01212-09759-142'}
+          ),true);
+          assert.strictEqual(c.exactPair(
+            {host:'M91620EQ7139',ua:'0000121209759142'},
+            {host:'M91620EQ7139',ua:'0000121209759143'}
+          ),false);
+          assert.strictEqual(c.exactPair(
+            {host:'M91620EQ7139',ua:'0000121209759142'},
+            {host:'M91620EQ7140',ua:'0000121209759142'}
+          ),false);
+
+          const rows=[
+            ['Equipos que le falta carcasa','UA','','Carcasas sin equipos','UA'],
+            ['Host SN','UA','','Host SN','UA'],
+            ['M91620EQ7139','0000121209759142','','M91620EQ7139','0000121209759142']
+          ];
+          const plans=c.detectSheetPlans(rows,'Equipos Match');
+          assert.strictEqual(plans.length,2);
+          assert.deepStrictEqual(plans.map(p=>p.typePreset),['Equipo','Carcasa']);
+
+          const txt=[
+            '000-01295-46854-125\tMV2147VR2383',
+            'M91620EQ7139',
+            '0000121209759142',
+            '0J0-01212-09700-052\tM11424TH6720'
+          ].join('\n');
+          const parsed=c.parseLocationText(txt,'DATA ENTRADA 08 DCX525.txt','auto');
+          assert.strictEqual(parsed.direction,'Entrada');
+          assert.strictEqual(parsed.entries.length,2);
+          assert.strictEqual(parsed.entries[0].host,'MV2147VR2383');
+          assert.strictEqual(parsed.entries[0].uaNorm,'0000129546854125');
+          assert.strictEqual(parsed.entries[1].host,'M91620EQ7139');
+          assert.strictEqual(parsed.entries[1].uaNorm,'0000121209759142');
+          assert.strictEqual(parsed.entries[1].lineStart,2);
+          assert.strictEqual(parsed.entries[1].lineEnd,3);
+          assert(parsed.invalid.length>=1);
+
+          console.log('MATCH_DATA_CONTRACT_OK');
+          NODE
+
+      - name: Install browser dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4174 --bind 127.0.0.1 > /tmp/match-data-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4174/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/match-data-http.log
+          exit 1
+
+      - name: Browser smoke - desktop tablet mobile and exact Match
+        shell: bash
+        run: |
+          cat > /tmp/match-data-smoke.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const operator={id:'00000000-0000-4000-8000-000000000001',name:'Operador Prueba',role:'admin',active:true,version:1};
+          const viewports=[
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',args:['--no-sandbox','--disable-setuid-sandbox']});
+            for(const viewport of viewports){
+              const page=await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const errors=[];
+              page.on('pageerror',e=>errors.push(String(e)));
+              await page.setRequestInterception(true);
+              page.on('request',request=>{
+                const url=request.url();
+                if(url.includes('/rpc/core_list_operators_service')){
+                  request.respond({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*','access-control-allow-headers':'apikey,content-type','access-control-allow-methods':'POST,OPTIONS'},body:JSON.stringify({ok:true,bootstrapped:true,operators:[operator]})});
+                }else if(/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)){
+                  request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+                }else if(url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')){
+                  request.respond({status:400,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{"ok":false}'});
+                }else request.continue();
+              });
+
+              await page.goto(`http://127.0.0.1:4174/?build=20260831-matchlocation1&device=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(()=>window.MatchDataContract&&window.MatchEquiposCore,{timeout:5000});
+              await page.waitForSelector('#operatorLock',{visible:true,timeout:5000});
+              await page.waitForFunction(()=>window.__MATCH_CLOUD_AUTH_READY__===true,{timeout:5000});
+
+              const ui=await page.evaluate(()=>{
+                const lock=document.querySelector('#operatorLock');
+                const main=document.querySelector('main.app');
+                const locationButton=document.querySelector('#locationImportBtn')?.getBoundingClientRect();
+                return {
+                  build:document.documentElement.dataset.build,
+                  contract:!!window.MatchDataContract,
+                  core:!!window.MatchEquiposCore,
+                  locationButton:!!document.querySelector('#locationImportBtn'),
+                  locationStatus:!!document.querySelector('#locationSourceStatus'),
+                  overlayInteractive:lock?.getAttribute('inert')===null&&getComputedStyle(lock).pointerEvents!=='none',
+                  mainLocked:main?.getAttribute('inert')!==null,
+                  locationFits:locationButton&&locationButton.left>=0&&locationButton.right<=innerWidth
+                };
+              });
+              assert.deepStrictEqual(ui,{build:'20260831-matchlocation1',contract:true,core:true,locationButton:true,locationStatus:true,overlayInteractive:true,mainLocked:true,locationFits:true});
+
+              const matchState=await page.evaluate(()=>{
+                const core=window.MatchEquiposCore;
+                const first=core.register('Equipo','M91620EQ7139','0000121209759142',{allowUA:true,allowConflict:true});
+                const wrong=core.register('Carcasa','M91620EQ7139','0000121209759143',{allowUA:true,allowConflict:true});
+                const afterWrong=core.getState().matches.filter(m=>!m.voided).length;
+                const exact=core.register('Carcasa','M91620EQ7139','000-01212-09759-142',{allowUA:true,allowConflict:true});
+                const afterExact=core.getState().matches.filter(m=>!m.voided).length;
+                const parsed=core.importLocationText('000-01212-09759-142\tM91620EQ7139','SALIDA DATA 08.txt','auto');
+                return {first:first.code,wrong:wrong.code,afterWrong,exact:exact.code,afterExact,parsedDirection:parsed.direction,parsedCount:parsed.entries.length};
+              });
+              assert.deepStrictEqual(matchState,{first:'PENDING',wrong:'MATCH_REVIEW',afterWrong:0,exact:'MATCH_OK',afterExact:1,parsedDirection:'Salida',parsedCount:1});
+
+              await Promise.race([
+                page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('responsive'),100))),
+                new Promise((_,reject)=>setTimeout(()=>reject(new Error('Page event loop blocked')),2000))
+              ]);
+              assert.deepStrictEqual(errors,[]);
+              await page.close();
+            }
+            await browser.close();
+            console.log('MATCH_DATA_BROWSER_OK');
+          })().catch(e=>{console.error(e);process.exit(1);});
+          NODE
+          node /tmp/match-data-smoke.cjs
+
+      - name: Cache marker check
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS 'http://127.0.0.1:4174/?cache=clean' | grep -F 'data-build="20260831-matchlocation1"'
+          curl -fsS 'http://127.0.0.1:4174/?cache=legacy' | grep -F 'match-data-contract.js?v=20260831-matchlocation1'
+          curl -fsS 'http://127.0.0.1:4174/?cache=legacy' | grep -F 'app.js?v=20260831-matchlocation1'
