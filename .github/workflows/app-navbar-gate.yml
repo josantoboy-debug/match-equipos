@@ -1,0 +1,145 @@
+name: App navbar gate
+
+on:
+  push:
+    branches:
+      - fix/app-navbar-20260831-r2
+    paths:
+      - 'index.html'
+      - '.github/workflows/app-navbar-gate.yml'
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  navbar-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax, references and navbar contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F 'data-build="20260831-matchlocation1"' index.html
+          grep -F 'data-nav-version="20260831-appnav1"' index.html
+          grep -F 'aria-label="Cambiar de aplicación"' index.html
+          grep -F 'href="https://josantoboy-debug.github.io/generador-pdt/"' index.html
+          grep -F 'aria-current="page" href="https://josantoboy-debug.github.io/match-equipos/"' index.html
+          test "$(grep -o '<a class="app-suite-link' index.html | wc -l)" -eq 2
+          if grep -R -n 'document.write' --include='*.js' .; then
+            echo 'document.write is not allowed'
+            exit 1
+          fi
+          for ref in $(grep -Eo '(src|href)="[^"?#]+\.(js|css)' index.html | sed -E 's/^(src|href)="//' | grep -vE '^https?://'); do
+            test -f "$ref" || { echo "Missing referenced asset: $ref"; exit 1; }
+          done
+
+      - name: Verify public navigation targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            'https://josantoboy-debug.github.io/generador-pdt/' \
+            'https://josantoboy-debug.github.io/match-equipos/'; do
+            code=$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "$url")
+            test "$code" = "200" || { echo "$url returned HTTP $code"; exit 1; }
+          done
+
+      - name: Install browser dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4176 --bind 127.0.0.1 > /tmp/match-navbar-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4176/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/match-navbar-http.log
+          exit 1
+
+      - name: Desktop tablet mobile navbar smoke
+        shell: bash
+        run: |
+          cat > /tmp/match-navbar-smoke.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const operator={id:'00000000-0000-4000-8000-000000000001',name:'Operador Prueba',role:'admin',active:true,version:1};
+          const viewports=[
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',args:['--no-sandbox','--disable-setuid-sandbox']});
+            for(const viewport of viewports){
+              const page=await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const errors=[];
+              page.on('pageerror',e=>errors.push(String(e)));
+              await page.setRequestInterception(true);
+              page.on('request',request=>{
+                const url=request.url();
+                if(url.includes('/rpc/core_list_operators_service')){
+                  request.respond({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*','access-control-allow-headers':'apikey,content-type','access-control-allow-methods':'POST,OPTIONS'},body:JSON.stringify({ok:true,bootstrapped:true,operators:[operator]})});
+                }else if(/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)){
+                  request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+                }else if(url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')){
+                  request.respond({status:400,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{"ok":false}'});
+                }else request.continue();
+              });
+              await page.goto(`http://127.0.0.1:4176/?nav=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForSelector('#operatorLock',{visible:true,timeout:5000});
+              await page.waitForFunction(()=>window.__MATCH_CLOUD_AUTH_READY__===true,{timeout:5000});
+              const state=await page.evaluate(()=>{
+                const nav=document.querySelector('.app-suite-nav');
+                const rect=nav?.getBoundingClientRect();
+                const links=[...document.querySelectorAll('.app-suite-link')].map(a=>({href:a.href,active:a.classList.contains('active'),current:a.getAttribute('aria-current')}));
+                const lock=document.querySelector('#operatorLock');
+                const main=document.querySelector('main.app');
+                return {
+                  build:document.documentElement.dataset.build,
+                  version:document.documentElement.dataset.navVersion,
+                  count:links.length,
+                  links,
+                  fits:!!rect&&rect.left>=-1&&rect.right<=innerWidth+1,
+                  overlayInteractive:lock?.getAttribute('inert')===null&&getComputedStyle(lock).pointerEvents!=='none',
+                  mainLocked:main?.getAttribute('inert')!==null
+                };
+              });
+              assert.strictEqual(state.build,'20260831-matchlocation1');
+              assert.strictEqual(state.version,'20260831-appnav1');
+              assert.strictEqual(state.count,2);
+              assert.deepStrictEqual(state.links,[
+                {href:'https://josantoboy-debug.github.io/generador-pdt/',active:false,current:null},
+                {href:'https://josantoboy-debug.github.io/match-equipos/',active:true,current:'page'}
+              ]);
+              assert.strictEqual(state.fits,true);
+              assert.strictEqual(state.overlayInteractive,true);
+              assert.strictEqual(state.mainLocked,true);
+              await Promise.race([
+                page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('responsive'),100))),
+                new Promise((_,reject)=>setTimeout(()=>reject(new Error('Page event loop blocked')),2000))
+              ]);
+              assert.deepStrictEqual(errors,[]);
+              await page.close();
+            }
+            await browser.close();
+            console.log('MATCH_APP_NAVBAR_OK');
+          })().catch(e=>{console.error(e);process.exit(1);});
+          NODE
+          node /tmp/match-navbar-smoke.cjs
+
+      - name: Cache marker check
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS 'http://127.0.0.1:4176/?cache=clean' | grep -F 'data-nav-version="20260831-appnav1"'
+          curl -fsS 'http://127.0.0.1:4176/?cache=legacy' | grep -F 'https://josantoboy-debug.github.io/generador-pdt/'
