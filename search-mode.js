@@ -72,7 +72,7 @@
       if (automatic) {
         help.textContent = 'Busca al escanear. Al completar Host SN o UA, conserva el resultado, limpia el campo y queda listo para el siguiente.';
         input.oninput = automaticSearch;
-        executeSearch();
+        automaticSearch();
       } else {
         help.textContent = 'La búsqueda solo se ejecuta al pulsar Buscar o ENTER.';
         input.oninput = manualWaitingMessage;
