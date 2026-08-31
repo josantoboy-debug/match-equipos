@@ -1,8 +1,8 @@
 (() => {
   'use strict';
 
-  const VERSION = '20260831-critical3';
-  const WARNING_TEXT = 'Precaución. Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.';
+  const VERSION = '20260831-critical4';
+  const WARNING_TEXT = 'Precaución. Guarda el registro antes de iniciar otra sesión.';
   const NEW_SESSION_SELECTORS = Object.freeze(['#newSessionBtn', '#equipmentNewSessionBtn']);
 
   function announceNewSessionWarning() {
