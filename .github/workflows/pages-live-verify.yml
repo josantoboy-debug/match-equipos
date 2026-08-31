@@ -62,7 +62,7 @@ jobs:
 
           verify_attempt() {
             local nonce="$1"
-            local code theme_code admin_code audit_code tts_code critical_code registration_code
+            local code theme_code admin_code audit_code tts_code critical_code registration_code new_session_code
 
             code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?verify=${nonce}" || true)
             [ "$code" = "200" ] || return 1
@@ -101,9 +101,11 @@ jobs:
             [ "$audit_code" = "200" ] || return 1
             grep -F "TTS_ASSET_VERSION = '${EXPECTED_TTS_VERSION}'" /tmp/audit.js >/dev/null || return 1
             grep -F "REGISTER_DEFAULT_MODE_VERSION = '${EXPECTED_REGISTRATION_MODE_VERSION}'" /tmp/audit.js >/dev/null || return 1
+            grep -F 'EQUIPMENT_NEW_SESSION_VERSION = REGISTER_DEFAULT_MODE_VERSION' /tmp/audit.js >/dev/null || return 1
             grep -F 'tts-control.js?v=${TTS_ASSET_VERSION}' /tmp/audit.js >/dev/null || return 1
             grep -F 'tts-critical-warnings.js?v=${TTS_ASSET_VERSION}' /tmp/audit.js >/dev/null || return 1
             grep -F 'equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}' /tmp/audit.js >/dev/null || return 1
+            grep -F 'equipment-new-session.js?v=${EQUIPMENT_NEW_SESSION_VERSION}' /tmp/audit.js >/dev/null || return 1
 
             tts_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/tts.js -w '%{http_code}' "${PUBLIC_URL}tts-control.js?v=${EXPECTED_TTS_VERSION}&verify=${nonce}" || true)
             [ "$tts_code" = "200" ] || return 1
@@ -124,7 +126,12 @@ jobs:
             grep -F "VERSION = '${EXPECTED_REGISTRATION_MODE_VERSION}'" /tmp/registration-mode.js >/dev/null || return 1
             grep -F "TARGET_OPERATOR = 'josue parfait'" /tmp/registration-mode.js >/dev/null || return 1
             grep -F "return normalizeName(operator?.name) === TARGET_OPERATOR ? 'automatic' : 'manual';" /tmp/registration-mode.js >/dev/null || return 1
-            grep -F "NEW_SESSION_SELECTOR = '#equipmentNewSessionBtn'" /tmp/registration-mode.js >/dev/null || return 1
+            grep -F "document.addEventListener('equipment:new-session-created'" /tmp/registration-mode.js >/dev/null || return 1
+
+            new_session_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/equipment-new-session.js -w '%{http_code}' "${PUBLIC_URL}equipment-new-session.js?v=${EXPECTED_REGISTRATION_MODE_VERSION}&verify=${nonce}" || true)
+            [ "$new_session_code" = "200" ] || return 1
+            grep -F "document.dispatchEvent(new CustomEvent('equipment:new-session-created'" /tmp/equipment-new-session.js >/dev/null || return 1
+            grep -F "source:'equipment-register'" /tmp/equipment-new-session.js >/dev/null || return 1
 
             echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=${code} build=${EXPECTED_BUILD} theme=${EXPECTED_THEME} admin=${EXPECTED_ADMIN_VERSION} tts=${EXPECTED_TTS_VERSION} registration=${EXPECTED_REGISTRATION_MODE_VERSION}"
             return 0
