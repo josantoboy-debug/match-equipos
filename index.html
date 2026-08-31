@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear2-sound1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1">
+<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260831-crossmatch1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -9,13 +9,15 @@
   <meta name="light-theme-version" content="20260831-light2">
   <meta name="tts-policy-version" content="20260831-critical4">
   <meta name="registration-mode-version" content="20260831-josueauto1">
-  <meta name="global-search-version" content="20260831-autoclear2-sound1">
+  <meta name="global-search-version" content="20260831-autoclear3-crossmatch1">
   <meta name="ui-sound-version" content="20260831-sound1">
   <meta name="brand-version" content="20260831-unitcheck1">
+  <meta name="cross-match-version" content="20260831-crossmatch1">
   <title>UNITCHECK</title>
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
   <link rel="stylesheet" href="file-index.css">
+  <link rel="stylesheet" href="match-cross-search.css?v=20260831-crossmatch1">
   <link rel="stylesheet" href="equipment-register.css">
   <link rel="stylesheet" href="operator-session.css">
   <link rel="stylesheet" href="theme-control.css?v=20260831-light2" data-theme-control="1">
@@ -133,17 +135,30 @@
     </article>
 
     <aside class="panel search-panel">
-      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Registros + Excel indexado + bases TXT de Entrada/Salida</p></div></div>
+      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Registros + cruce Excel maestro ↔ múltiples bases TXT</p></div></div>
       <div class="search-pad">
         <div class="search-mode-switch" role="group" aria-label="Modo de búsqueda">
           <button id="searchModeAuto" class="search-mode-btn active" type="button">Automático</button>
           <button id="searchModeManual" class="search-mode-btn" type="button">Manual</button>
         </div>
         <div class="search-control-row">
-          <input id="searchInput" class="search" placeholder="Host SN, UA o texto…" autocomplete="off">
+          <input id="searchInput" class="search" placeholder="Host SN, UA, carcasa o parte del código…" autocomplete="off">
           <button id="searchRunBtn" class="search-run-btn" type="button" hidden>Buscar</button>
         </div>
         <div id="searchModeHelp" class="search-mode-help">Busca mientras escribes o escaneas.</div>
+        <div class="cross-match-source-box" data-cross-match-version="20260831-crossmatch1">
+          <div class="cross-match-source-head"><strong>Cruce Excel ↔ TXT</strong><span>SR + UA · todas las coincidencias</span></div>
+          <div class="cross-match-source-actions">
+            <button id="crossMatchExcelBtn" type="button">Excel maestro</button>
+            <button id="crossMatchTxtBtn" type="button">TXT (varios)</button>
+            <button id="crossMatchFolderBtn" type="button">Carpeta TXT</button>
+            <button id="crossMatchClearBtn" type="button">Limpiar fuentes</button>
+          </div>
+          <input id="crossMatchExcelInput" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods" hidden>
+          <input id="crossMatchTxtInput" type="file" accept=".txt,text/plain" multiple hidden>
+          <input id="crossMatchFolderInput" type="file" accept=".txt,text/plain" multiple webkitdirectory directory hidden>
+          <div id="crossMatchStatus" class="cross-match-status"><span class="cross-match-dot"></span><span>Excel maestro: no cargado · TXT: sin bases cargadas</span></div>
+        </div>
         <div id="fileIndexStatus" class="file-index-status"><span class="file-index-dot"></span><span>Sin archivos indexados</span></div>
         <div id="locationSourceStatus" class="file-index-status"><span class="file-index-dot"></span><span>Sin bases TXT de ubicación</span></div>
         <div id="searchResults" class="search-results"><div class="empty">Sin búsqueda activa.</div></div>
@@ -217,7 +232,7 @@
     </div>
     <div id="workspaceBody"></div>
   </section>
-  <p class="footnote">El Excel define pendientes de Match; las bases TXT indican dónde aparece cada par Serial + UA. El Match solo se confirma cuando ambos identificadores coinciden.</p>
+  <p class="footnote">El Excel define los registros y su rol; las bases TXT relacionan CARCASA ↔ EQUIPO. El buscador conserva los valores originales y muestra hoja/fila y archivo/línea para auditoría.</p>
 </main>
 
 <footer class="app-footer" aria-label="Créditos de desarrollo">
@@ -236,9 +251,11 @@
 <div id="toast" class="toast"></div>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="match-data-contract.js?v=20260831-matchlocation1"></script>
+<script src="match-cross-contract.js?v=20260831-crossmatch1"></script>
 <script src="app.js?v=20260831-matchlocation1"></script>
 <script src="ui-sounds.js?v=20260831-sound1"></script>
-<script src="search-mode.js?v=20260831-autoclear2-sound1"></script>
+<script src="match-cross-search.js?v=20260831-crossmatch1"></script>
+<script src="search-mode.js?v=20260831-autoclear3-crossmatch1"></script>
 <script src="file-index.js"></script>
 <script src="matches-export.js"></script>
 <script src="equipment-register.js?v=ua16-20260829"></script>

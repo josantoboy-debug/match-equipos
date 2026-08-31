@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SEARCH_MODE_VERSION = '20260831-autoclear2-sound1';
+  const SEARCH_MODE_VERSION = '20260831-autoclear3-crossmatch1';
 
   document.addEventListener('DOMContentLoaded', () => {
     const input = document.querySelector('#searchInput');
@@ -27,7 +27,7 @@
     }
 
     function hasSearchHit() {
-      return Boolean(results.querySelector('.search-card'));
+      return Boolean(results.querySelector('.search-card,.cross-match-card,.cross-source-hit'));
     }
 
     function announceFoundResult(query) {
@@ -47,6 +47,9 @@
       const query = input.value;
       if (typeof originalSearchHandler === 'function') {
         originalSearchHandler.call(input, new Event('input'));
+      }
+      if (window.MatchCrossSearch && typeof window.MatchCrossSearch.appendResults === 'function') {
+        window.MatchCrossSearch.appendResults(query, results);
       }
       if (window.FileIndexSearch && typeof window.FileIndexSearch.appendResults === 'function') {
         window.FileIndexSearch.appendResults(query, results);
@@ -82,11 +85,11 @@
       help.classList.toggle('manual', !automatic);
 
       if (automatic) {
-        help.textContent = 'Busca al escanear. Si encuentra un equipo o dato indexado emite una alerta; al completar Host SN o UA limpia el campo y queda listo para el siguiente.';
+        help.textContent = 'Busca al escanear. Cruza registros, Excel maestro y todas las bases TXT cargadas; al completar Host SN o UA limpia el campo y queda listo para el siguiente.';
         input.oninput = automaticSearch;
         automaticSearch();
       } else {
-        help.textContent = 'La búsqueda solo se ejecuta al pulsar Buscar o ENTER. Si hay coincidencias emite una alerta sonora.';
+        help.textContent = 'La búsqueda y el cruce Excel ↔ TXT se ejecutan al pulsar Buscar o ENTER. Si hay coincidencias emite una alerta sonora.';
         input.oninput = manualWaitingMessage;
         manualWaitingMessage();
       }
