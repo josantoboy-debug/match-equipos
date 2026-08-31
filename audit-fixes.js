@@ -6,6 +6,7 @@
   const THEME_ASSET_VERSION = '20260831-light2';
   const TTS_ASSET_VERSION = '20260831-critical4';
   const REGISTER_DEFAULT_MODE_VERSION = '20260831-josueauto1';
+  const EQUIPMENT_NEW_SESSION_VERSION = REGISTER_DEFAULT_MODE_VERSION;
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
@@ -63,15 +64,11 @@
   }
 
   function loadEquipmentDefaultMode() {
-    if (window.EquipmentCaptureDefaults || document.querySelector('script[data-equipment-default-mode]')) {
-      window.EquipmentCaptureDefaults?.bindNewSession?.();
-      return;
-    }
+    if (window.EquipmentCaptureDefaults || document.querySelector('script[data-equipment-default-mode]')) return;
     const script = document.createElement('script');
     script.src = `equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}`;
     script.dataset.equipmentDefaultMode = '1';
     script.async = false;
-    script.onload = () => window.EquipmentCaptureDefaults?.bindNewSession?.();
     script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-register-default-mode.js');
     document.body.appendChild(script);
   }
@@ -138,7 +135,7 @@
       return;
     }
     const script = document.createElement('script');
-    script.src = 'equipment-new-session.js?v=ccf3874';
+    script.src = `equipment-new-session.js?v=${EQUIPMENT_NEW_SESSION_VERSION}`;
     script.dataset.equipmentNewSession = '1';
     script.async = false;
     script.onload = () => {
