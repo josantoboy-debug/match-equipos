@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - repair/global-search-autoclear-20260831
+      - repair/ui-sounds-20260831-r2
     paths:
       - 'search-mode.js'
       - 'index.html'
@@ -31,10 +32,10 @@ jobs:
         run: |
           set -euo pipefail
           node --check search-mode.js
-          grep -F "SEARCH_MODE_VERSION = '20260831-autoclear1'" search-mode.js
-          grep -F 'data-global-search-version="20260831-autoclear1"' index.html
-          grep -F '<meta name="global-search-version" content="20260831-autoclear1">' index.html
-          grep -F 'search-mode.js?v=20260831-autoclear1' index.html
+          grep -F "SEARCH_MODE_VERSION = '20260831-autoclear2-sound1'" search-mode.js
+          grep -F 'data-global-search-version="20260831-autoclear2-sound1"' index.html
+          grep -F '<meta name="global-search-version" content="20260831-autoclear2-sound1">' index.html
+          grep -F 'search-mode.js?v=20260831-autoclear2-sound1' index.html
           grep -F 'prepareForNextSearch' search-mode.js
           grep -F 'isCompleteAutomaticQuery' search-mode.js
           if grep -F '<script src="search-mode.js"></script>' index.html; then
@@ -74,7 +75,7 @@ jobs:
               window.FileIndexSearch={appendResults(query,node){node.insertAdjacentHTML('beforeend','<div>FILE:'+query+'</div>');}};
               window.EquipmentRegistry={appendSearchResults(query,node){node.insertAdjacentHTML('beforeend','<div>BOX:'+query+'</div>');}};
             </script>
-            <script src="search-mode.js?v=20260831-autoclear1"></script>
+            <script src="search-mode.js?v=20260831-autoclear2-sound1"></script>
           </body>
           </html>
           HTML
@@ -123,7 +124,7 @@ jobs:
               page.on('console',msg=>{if(msg.type()==='error')consoleErrors.push(msg.text());});
 
               await page.goto(`http://127.0.0.1:4178/global-search-harness.tmp.html?viewport=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
-              await page.waitForFunction(()=>window.MatchSearchModes?.version==='20260831-autoclear1',{timeout:5000});
+              await page.waitForFunction(()=>window.MatchSearchModes?.version==='20260831-autoclear2-sound1',{timeout:5000});
 
               let state=await page.evaluate(()=>({
                 automatic:document.querySelector('#searchModeAuto').classList.contains('active'),
@@ -209,7 +210,7 @@ jobs:
         shell: bash
         env:
           PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
-          SEARCH_VERSION: 20260831-autoclear1
+          SEARCH_VERSION: 20260831-autoclear2-sound1
         run: |
           set -uo pipefail
           ok=0
