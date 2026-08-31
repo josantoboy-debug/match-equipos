@@ -39,23 +39,19 @@ jobs:
           node <<'NODE'
           const assert = require('assert');
           const listeners = {};
-          const buttonListeners = {};
           let validationTitle = 'Registro manual activado';
-          const newSessionButton = {
-            dataset:{},
-            addEventListener(type, fn){ if(type === 'click') buttonListeners.click = fn; }
-          };
           const modes = [];
+          const addListener = (type, fn) => (listeners[type] ??= []).push(fn);
+          const dispatch = (type, event = {}) => (listeners[type] || []).forEach(fn => fn(event));
           global.setTimeout = fn => { fn(); return 1; };
           global.document = {
             readyState:'complete',
             documentElement:{dataset:{}},
             querySelector(selector){
-              if(selector === '#equipmentNewSessionBtn') return newSessionButton;
               if(selector === '#equipmentValidationMessage strong') return {textContent:validationTitle};
               return null;
             },
-            addEventListener(type, fn){ listeners[type] = fn; }
+            addEventListener:addListener
           };
           global.window = {
             OperatorSession:{getCurrentOperator:()=>({id:'op-josue',name:'Josue Parfait'})},
@@ -69,18 +65,19 @@ jobs:
           assert.strictEqual(api.defaultModeFor({name:'  JOSUÉ   PARFAIT '}), 'automatic');
           assert.strictEqual(api.defaultModeFor({name:'Operador Prueba'}), 'manual');
           assert.strictEqual(modes.at(-1), 'automatic', 'Josue debe iniciar en automático');
-          assert.strictEqual(typeof buttonListeners.click, 'function', 'Nueva sesión debe quedar enlazada');
+          assert.strictEqual((listeners.click || []).length, 1, 'Nueva sesión debe quedar enlazada por delegación estable');
 
+          const newSessionClick = {target:{closest(selector){ return selector === '#equipmentNewSessionBtn' ? {} : null; }}};
           modes.push('manual');
           validationTitle = 'Registro manual activado';
-          buttonListeners.click();
+          dispatch('click', newSessionClick);
           assert.strictEqual(modes.at(-1), 'manual', 'Cancelar/no completar Nueva sesión no debe cambiar la elección manual');
 
           validationTitle = 'Nueva sesión lista';
-          buttonListeners.click();
+          dispatch('click', newSessionClick);
           assert.strictEqual(modes.at(-1), 'automatic', 'Nueva sesión completada debe volver al predeterminado de Josue');
 
-          listeners['operator:login']({detail:{id:'op-other',name:'Operador Prueba'}});
+          dispatch('operator:login',{detail:{id:'op-other',name:'Operador Prueba'}});
           assert.strictEqual(modes.at(-1), 'manual', 'Otros operadores deben conservar Manual por defecto');
           console.log('OPERATOR_DEFAULT_MODE_UNIT_OK');
           NODE
