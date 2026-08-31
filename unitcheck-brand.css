@@ -1,60 +1,62 @@
 /* UNITCHECK header branding
  * Brand version: 20260831-unitcheck1
- * Official logo asset plus matching /favicon.ico prevent branding-related 404s.
- * Visual-only overrides. No application behavior is changed here.
+ * Visual-only: replaces the old M badge with the UNITCHECK graphic mark and title.
  */
 .topbar{padding-top:8px;padding-bottom:8px}
 .unitcheck-brand{
   display:flex;
   align-items:center;
   min-width:0;
-  flex:0 1 235px;
+  flex:0 1 250px;
 }
 .unitcheck-brand-stack{
-  display:block;
+  display:flex;
+  align-items:center;
+  gap:10px;
   min-width:0;
 }
 .unitcheck-logo-frame{
-  display:flex;
-  align-items:center;
-  justify-content:flex-start;
-  width:clamp(190px,14vw,220px);
-  max-width:100%;
-  padding:2px 4px;
+  width:42px;
+  height:42px;
+  flex:0 0 42px;
   overflow:hidden;
   border:1px solid rgba(148,163,184,.30);
-  border-radius:9px;
+  border-radius:10px;
   background:#fff;
-  box-shadow:0 2px 9px rgba(2,6,23,.11);
+  box-shadow:0 2px 8px rgba(2,6,23,.10);
 }
 .unitcheck-logo{
   display:block;
-  width:100%;
-  height:auto;
-  aspect-ratio:720/238;
+  width:auto;
+  max-width:none;
+  height:42px;
   object-fit:contain;
   object-position:left center;
 }
 .unitcheck-subtitle{display:none!important}
+.unitcheck-brand-stack::after{
+  content:"UNITCHECK";
+  display:block;
+  color:var(--text,#edf3fb);
+  font-size:17px;
+  font-weight:850;
+  line-height:1;
+  letter-spacing:.01em;
+  white-space:nowrap;
+}
 html[data-theme="light"] .unitcheck-logo-frame{
   border-color:#d7e0e9;
-  box-shadow:0 2px 8px rgba(15,23,42,.07);
+  box-shadow:0 2px 7px rgba(15,23,42,.07);
 }
+html[data-theme="light"] .unitcheck-brand-stack::after{color:var(--text,#172033)}
 @media(max-width:1180px){
-  .unitcheck-brand{flex:1 1 225px}
-  .unitcheck-logo-frame{width:205px}
-}
-@media(max-width:900px){
-  .unitcheck-logo-frame{width:195px}
+  .unitcheck-brand{flex:1 1 250px}
 }
 @media(max-width:620px){
-  .topbar{align-items:flex-start!important;padding-top:9px;padding-bottom:9px}
-  .unitcheck-brand{flex:1 1 100%;width:100%;max-width:100%}
-  .unitcheck-logo-frame{width:min(205px,64vw);border-radius:8px;padding:2px 4px}
-  .topbar .top-actions{width:100%;max-width:100%;justify-content:flex-end;overflow:visible;flex-wrap:wrap}
-}
-@media(max-width:420px){
-  .unitcheck-logo-frame{width:min(195px,70vw)}
+  .unitcheck-logo-frame{width:38px;height:38px;flex-basis:38px;border-radius:9px}
+  .unitcheck-logo{height:38px}
+  .unitcheck-brand-stack{gap:8px}
+  .unitcheck-brand-stack::after{font-size:15px}
 }
 @media print{
   .unitcheck-logo-frame{box-shadow:none;border-color:#d1d5db}
