@@ -28,9 +28,13 @@ jobs:
           grep -F 'audit-fixes.js?v=20260831-josueauto1' index.html
           grep -F "REGISTER_DEFAULT_MODE_VERSION = '20260831-josueauto1'" audit-fixes.js
           grep -F 'equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}' audit-fixes.js
+          grep -F 'equipment-new-session.js?v=${EQUIPMENT_NEW_SESSION_VERSION}' audit-fixes.js
           grep -F "VERSION = '20260831-josueauto1'" equipment-register-default-mode.js
           grep -F "TARGET_OPERATOR = 'josue parfait'" equipment-register-default-mode.js
+          grep -F "equipment:new-session-created" equipment-register-default-mode.js
+          grep -F "equipment:new-session-created" equipment-new-session.js
           ! grep -F 'audit-fixes.js?v=20260831-critical4' index.html
+          ! grep -F 'equipment-new-session.js?v=ccf3874' audit-fixes.js
 
       - name: Unit test operator-specific default policy
         shell: bash
@@ -39,7 +43,6 @@ jobs:
           node <<'NODE'
           const assert = require('assert');
           const listeners = {};
-          let validationTitle = 'Registro manual activado';
           const modes = [];
           const addListener = (type, fn) => (listeners[type] ??= []).push(fn);
           const dispatch = (type, event = {}) => (listeners[type] || []).forEach(fn => fn(event));
@@ -47,10 +50,6 @@ jobs:
           global.document = {
             readyState:'complete',
             documentElement:{dataset:{}},
-            querySelector(selector){
-              if(selector === '#equipmentValidationMessage strong') return {textContent:validationTitle};
-              return null;
-            },
             addEventListener:addListener
           };
           global.window = {
@@ -65,20 +64,16 @@ jobs:
           assert.strictEqual(api.defaultModeFor({name:'  JOSUÉ   PARFAIT '}), 'automatic');
           assert.strictEqual(api.defaultModeFor({name:'Operador Prueba'}), 'manual');
           assert.strictEqual(modes.at(-1), 'automatic', 'Josue debe iniciar en automático');
-          assert.strictEqual((listeners.click || []).length, 1, 'Nueva sesión debe quedar enlazada por delegación estable');
+          assert.strictEqual((listeners['equipment:new-session-created'] || []).length, 1, 'Debe escuchar el evento real de Nueva sesión completada');
 
-          const newSessionClick = {target:{closest(selector){ return selector === '#equipmentNewSessionBtn' ? {} : null; }}};
           modes.push('manual');
-          validationTitle = 'Registro manual activado';
-          dispatch('click', newSessionClick);
-          assert.strictEqual(modes.at(-1), 'manual', 'Cancelar/no completar Nueva sesión no debe cambiar la elección manual');
-
-          validationTitle = 'Nueva sesión lista';
-          dispatch('click', newSessionClick);
+          dispatch('equipment:new-session-created',{detail:{operator:{id:'op-josue',name:'Josue Parfait'},source:'equipment-register'}});
           assert.strictEqual(modes.at(-1), 'automatic', 'Nueva sesión completada debe volver al predeterminado de Josue');
 
           dispatch('operator:login',{detail:{id:'op-other',name:'Operador Prueba'}});
           assert.strictEqual(modes.at(-1), 'manual', 'Otros operadores deben conservar Manual por defecto');
+          dispatch('equipment:new-session-created',{detail:{operator:{id:'op-other',name:'Operador Prueba'},source:'equipment-register'}});
+          assert.strictEqual(modes.at(-1), 'manual', 'Nueva sesión de otro operador debe permanecer en Manual');
           console.log('OPERATOR_DEFAULT_MODE_UNIT_OK');
           NODE
 
@@ -158,15 +153,21 @@ jobs:
                 marker:document.documentElement.dataset.equipmentDefaultModeVersion,
                 operator:window.OperatorSession.getCurrentOperator()?.name,
                 mainInert:document.querySelector('main.app')?.hasAttribute('inert'),
-                moduleLoaded:[...document.scripts].some(s => (s.src||'').includes('equipment-register-default-mode.js?v=20260831-josueauto1'))
+                moduleLoaded:[...document.scripts].some(s => (s.src||'').includes('equipment-register-default-mode.js?v=20260831-josueauto1')),
+                newSessionVersioned:[...document.scripts].some(s => (s.src||'').includes('equipment-new-session.js?v=20260831-josueauto1'))
               }));
-              assert.deepStrictEqual(state,{mode:'automatic',buttonText:'AUTOMÁTICO',marker:'20260831-josueauto1',operator:'Josue Parfait',mainInert:false,moduleLoaded:true});
+              assert.deepStrictEqual(state,{mode:'automatic',buttonText:'AUTOMÁTICO',marker:'20260831-josueauto1',operator:'Josue Parfait',mainInert:false,moduleLoaded:true,newSessionVersioned:true});
 
               await page.evaluate(() => window.EquipmentRegistry.setCaptureMode('manual'));
               await new Promise(resolve => setTimeout(resolve,100));
               assert.strictEqual(await page.evaluate(() => window.EquipmentRegistry.getCaptureMode()),'manual','La selección manual del operador debe mantenerse durante la sesión');
 
               await page.waitForSelector('#equipmentNewSessionBtn',{timeout:5000});
+              await page.evaluate(() => { window.confirm = () => false; });
+              await page.click('#equipmentNewSessionBtn');
+              await new Promise(resolve => setTimeout(resolve,100));
+              assert.strictEqual(await page.evaluate(() => window.EquipmentRegistry.getCaptureMode()),'manual','Cancelar Nueva sesión no debe cambiar la elección manual');
+
               await page.evaluate(() => { window.confirm = () => true; });
               await page.click('#equipmentNewSessionBtn');
               await page.waitForFunction(() => window.EquipmentRegistry.getCaptureMode() === 'automatic',{timeout:3000});
