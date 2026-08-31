@@ -1,0 +1,53 @@
+name: Live Pages verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read expected build marker
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          build=$(sed -n 's/.*data-build="\([^"]*\)".*/\1/p' index.html | head -1)
+          test -n "$build"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Expected build: $build"
+
+      - name: Verify public GitHub Pages HTTP 200 and deployed assets
+        env:
+          EXPECTED_BUILD: ${{ steps.build.outputs.build }}
+          PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in {1..36}; do
+            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?verify=${nonce}" || true)
+            if [ "$code" = "200" ] && grep -F "data-build=\"${EXPECTED_BUILD}\"" /tmp/live.html >/dev/null; then
+              grep -F "match-data-contract.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null
+              grep -F "app.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null
+              curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "${PUBLIC_URL}match-data-contract.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/contract.js
+              curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js
+              grep -F 'MatchDataContract' /tmp/contract.js >/dev/null
+              grep -F 'MatchEquiposCore' /tmp/app.js >/dev/null
+              echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=200 build=${EXPECTED_BUILD}"
+              ok=1
+              break
+            fi
+            echo "Attempt ${attempt}: http=${code}; waiting for build ${EXPECTED_BUILD}"
+            sleep 5
+          done
+          test "$ok" = "1"
