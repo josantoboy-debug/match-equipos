@@ -1,0 +1,262 @@
+name: Light theme gate
+
+on:
+  push:
+    branches:
+      - repair/light-theme-v2-20260831
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  light-theme-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static syntax, asset and cache checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F "20260831-light2" theme-control.css
+          grep -F "THEME_ASSET_VERSION = '20260831-light2'" audit-fixes.js
+          grep -F 'theme-control.css?v=${THEME_ASSET_VERSION}' audit-fixes.js
+          grep -F -- '--accent:#2563eb' theme-control.css
+          grep -F -- '--placeholder:#667085' theme-control.css
+          grep -F 'tbody tr:nth-child(even) td' theme-control.css
+          grep -F '.equipment-register-summary>div' theme-control.css
+          if grep -R -n 'document.write' --include='*.js' .; then
+            echo 'document.write is not allowed'
+            exit 1
+          fi
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urlsplit
+
+          class Assets(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.refs=[]
+              def handle_starttag(self, tag, attrs):
+                  attrs=dict(attrs)
+                  if tag=='script' and attrs.get('src'): self.refs.append(attrs['src'])
+                  if tag=='link' and attrs.get('href'): self.refs.append(attrs['href'])
+
+          parser=Assets(); parser.feed(Path('index.html').read_text(encoding='utf-8'))
+          missing=[]
+          for ref in parser.refs:
+              if ref.startswith(('http://','https://','data:','#')): continue
+              path=urlsplit(ref).path
+              if path and not Path(path).exists(): missing.append(ref)
+          if missing: raise SystemExit(f'Missing local assets: {missing}')
+
+          css=Path('theme-control.css').read_text(encoding='utf-8')
+          if css.count('{') != css.count('}'):
+              raise SystemExit('Unbalanced CSS braces')
+          print('STATIC_LIGHT_THEME_OK')
+          PY
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        run: |
+          python3 -m http.server 4175 --bind 127.0.0.1 > /tmp/match-light-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4175/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/match-light-http.log
+          exit 1
+
+      - name: Desktop, tablet and mobile light-theme smoke
+        shell: bash
+        run: |
+          cat > /tmp/light-theme-smoke.cjs <<'NODE'
+          const assert = require('assert');
+          const puppeteer = require(process.cwd() + '/node_modules/puppeteer-core');
+
+          const operator = {id:'00000000-0000-4000-8000-000000000001',name:'Operador Visual',role:'admin',active:true,version:1};
+          const viewports = [
+            {name:'desktop',width:1536,height:864},
+            {name:'tablet',width:820,height:1180},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          function parseRgb(value) {
+            const m = String(value).match(/rgba?\((\d+)[, ]+(\d+)[, ]+(\d+)/i);
+            return m ? [Number(m[1]),Number(m[2]),Number(m[3])] : null;
+          }
+          function relativeLuminance(rgb) {
+            const c=rgb.map(v=>v/255).map(v=>v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4));
+            return .2126*c[0]+.7152*c[1]+.0722*c[2];
+          }
+          function contrast(fg,bg) {
+            const a=relativeLuminance(fg), b=relativeLuminance(bg);
+            return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+          }
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless:true,
+              executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome',
+              args:['--no-sandbox','--disable-setuid-sandbox']
+            });
+
+            for (const viewport of viewports) {
+              const page = await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              await page.emulateMediaFeatures([{name:'prefers-color-scheme',value:'light'}]);
+              const errors=[];
+              page.on('pageerror', error => errors.push(String(error)));
+              await page.setRequestInterception(true);
+              page.on('request', request => {
+                const url=request.url();
+                if (url.includes('/rpc/core_list_operators_service')) {
+                  request.respond({
+                    status:200,
+                    contentType:'application/json',
+                    headers:{
+                      'access-control-allow-origin':'*',
+                      'access-control-allow-headers':'apikey,content-type',
+                      'access-control-allow-methods':'POST,OPTIONS'
+                    },
+                    body:JSON.stringify({ok:true,bootstrapped:true,operators:[operator]})
+                  });
+                } else if (/^https:\/\/(?:cdn\.sheetjs\.com|cdn\.jsdelivr\.net)/.test(url)) {
+                  request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+                } else if (url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')) {
+                  request.respond({
+                    status:400,
+                    contentType:'application/json',
+                    headers:{'access-control-allow-origin':'*'},
+                    body:'{"ok":false}'
+                  });
+                } else {
+                  request.continue();
+                }
+              });
+
+              await page.goto(`http://127.0.0.1:4175/?lightgate=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(() => document.documentElement.dataset.theme==='light' && !!window.AppTheme,{timeout:7000});
+              await page.waitForFunction(() => document.querySelector('link[data-theme-control]')?.href.includes('20260831-light2'),{timeout:7000});
+              await page.waitForSelector('#operatorLock',{visible:true,timeout:5000});
+
+              const authState=await page.evaluate(() => {
+                const lock=document.querySelector('#operatorLock');
+                return {
+                  interactive:lock?.getAttribute('inert')===null && getComputedStyle(lock).pointerEvents!=='none',
+                  mainLocked:document.querySelector('main.app')?.getAttribute('inert')!==null,
+                  themeVersion:document.querySelector('link[data-theme-control]')?.href || ''
+                };
+              });
+              assert.equal(authState.interactive,true);
+              assert.equal(authState.mainLocked,true);
+              assert.ok(authState.themeVersion.includes('20260831-light2'));
+
+              // The auth gate is tested above. Hide it only inside this test harness so the operational UI can be measured.
+              await page.evaluate(() => {
+                const lock=document.querySelector('#operatorLock');
+                if (lock) lock.hidden=true;
+                document.querySelector('main.app')?.removeAttribute('inert');
+              });
+
+              const state=await page.evaluate(() => {
+                const css=(sel,pseudo=null)=>getComputedStyle(document.querySelector(sel),pseudo);
+                const bg=sel=>css(sel).backgroundColor;
+                const color=sel=>css(sel).color;
+                const root=getComputedStyle(document.documentElement);
+                const summary=[...document.querySelectorAll('.equipment-register-summary>div')].map(el=>getComputedStyle(el).backgroundColor);
+                const panelRect=document.querySelector('#equipmentRegisterPanel').getBoundingClientRect();
+                return {
+                  accent:root.getPropertyValue('--accent').trim(),
+                  bodyTheme:document.documentElement.dataset.theme,
+                  panel:bg('.panel'),
+                  secondary:bg('#equipmentImportBtn'),
+                  primary:bg('#equipmentAddBtn'),
+                  registerPrimary:bg('#registerBtn'),
+                  activeSearch:bg('#searchModeAuto'),
+                  activeNav:bg('.app-suite-link.active'),
+                  fileStatus:bg('#fileIndexStatus'),
+                  equipmentHeadImage:css('.equipment-register-head').backgroundImage,
+                  workspaceHead:bg('.workspace-head'),
+                  summary,
+                  smallColor:color('.register-grid small'),
+                  smallBg:bg('#hostInput'),
+                  placeholder:css('#hostInput','::placeholder').color,
+                  placeholderBg:bg('#hostInput'),
+                  panelFits:panelRect.left>=-1 && panelRect.right<=innerWidth+1,
+                  themeLink:document.querySelector('link[data-theme-control]')?.href || '',
+                  validationBorder:css('.equipment-validation-icon').borderStyle,
+                  resultBorder:css('.result-icon').borderStyle
+                };
+              });
+
+              assert.equal(state.accent,'#2563eb');
+              assert.equal(state.bodyTheme,'light');
+              assert.equal(state.panel,'rgb(255, 255, 255)');
+              assert.equal(state.secondary,'rgb(255, 255, 255)');
+              assert.equal(state.primary,'rgb(37, 99, 235)');
+              assert.equal(state.registerPrimary,state.primary);
+              assert.equal(state.activeSearch,state.primary);
+              assert.equal(state.activeNav,state.primary);
+              assert.equal(state.fileStatus,'rgb(247, 249, 252)');
+              assert.ok(!/rgb\((?:1[0-9]|2[0-9]|3[0-9]),\s*(?:1[0-9]|2[0-9]|3[0-9]),\s*(?:1[0-9]|2[0-9]|3[0-9])\)/.test(state.equipmentHeadImage),state.equipmentHeadImage);
+              assert.equal(state.workspaceHead,'rgb(251, 252, 254)');
+              assert.ok(state.summary.length===4 && state.summary.every(v=>v==='rgb(255, 255, 255)'));
+              assert.equal(state.panelFits,true);
+              assert.equal(state.validationBorder,'solid');
+              assert.equal(state.resultBorder,'solid');
+
+              const smallContrast=contrast(parseRgb(state.smallColor),parseRgb(state.smallBg));
+              const placeholderContrast=contrast(parseRgb(state.placeholder),parseRgb(state.placeholderBg));
+              assert.ok(smallContrast>=4.5,`small contrast ${smallContrast}`);
+              assert.ok(placeholderContrast>=4.5,`placeholder contrast ${placeholderContrast}`);
+
+              await page.evaluate(() => {
+                const body=document.querySelector('#equipmentRegisterBody');
+                body.innerHTML='<tr id="zebra1"><td>1</td><td>A</td><td>M00000000001</td><td>0000000000000001</td><td>1</td><td>1</td><td>Ahora</td><td></td></tr><tr id="zebra2"><td>2</td><td>B</td><td>M00000000002</td><td>0000000000000002</td><td>1</td><td>2</td><td>Ahora</td><td></td></tr>';
+              });
+              const zebra=await page.evaluate(() => [getComputedStyle(document.querySelector('#zebra1 td')).backgroundColor,getComputedStyle(document.querySelector('#zebra2 td')).backgroundColor]);
+              assert.notEqual(zebra[0],zebra[1]);
+              await page.hover('#zebra2');
+              const hovered=await page.$eval('#zebra2 td',el=>getComputedStyle(el).backgroundColor);
+              assert.notEqual(hovered,zebra[1]);
+
+              // Simulate a stale cached light stylesheet loaded first, then force the versioned stylesheet to win.
+              await page.evaluate(async () => {
+                const stale=document.createElement('style');
+                stale.id='legacy-light-cache-simulation';
+                stale.textContent='html[data-theme="light"] .equipment-register-head{background:#121b29} html[data-theme="light"] .equipment-register-summary>div{background:#0c141f}';
+                document.head.appendChild(stale);
+                const fresh=document.createElement('link');
+                fresh.rel='stylesheet';
+                fresh.href=`theme-control.css?v=20260831-light2&cachetest=${Date.now()}`;
+                await new Promise((resolve,reject)=>{fresh.onload=resolve;fresh.onerror=reject;document.head.appendChild(fresh);});
+              });
+              const cacheState=await page.evaluate(() => ({
+                head:getComputedStyle(document.querySelector('.equipment-register-head')).backgroundImage,
+                summary:getComputedStyle(document.querySelector('.equipment-register-summary>div')).backgroundColor
+              }));
+              assert.equal(cacheState.summary,'rgb(255, 255, 255)');
+              assert.ok(!cacheState.head.includes('rgb(18, 27, 41)'),cacheState.head);
+
+              await Promise.race([
+                page.evaluate(() => new Promise(resolve => setTimeout(() => resolve('responsive'),120))),
+                new Promise((_,reject) => setTimeout(() => reject(new Error('Page event loop is blocked')),2000))
+              ]);
+
+              assert.deepStrictEqual(errors,[]);
+              console.log(`LIGHT_THEME_${viewport.name.toUpperCase()}_OK small=${smallContrast.toFixed(2)} placeholder=${placeholderContrast.toFixed(2)}`);
+              await page.close();
+            }
+
+            await browser.close();
+            console.log('MATCH_LIGHT_THEME_GATE_OK');
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
+          node /tmp/light-theme-smoke.cjs
