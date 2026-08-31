@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const SEARCH_MODE_VERSION = '20260831-autoclear1';
+  const SEARCH_MODE_VERSION = '20260831-autoclear2-sound1';
 
   document.addEventListener('DOMContentLoaded', () => {
     const input = document.querySelector('#searchInput');
@@ -26,12 +26,24 @@
       return /^M[A-Z0-9]{11}$/.test(query) || /^0000[0-9]{12}$/.test(query);
     }
 
+    function hasSearchHit() {
+      return Boolean(results.querySelector('.search-card'));
+    }
+
+    function announceFoundResult(query) {
+      if (!String(query ?? '').trim() || !hasSearchHit()) return false;
+      if (window.MatchUISounds && typeof window.MatchUISounds.playFound === 'function') {
+        void window.MatchUISounds.playFound();
+      }
+      return true;
+    }
+
     function prepareForNextSearch() {
       input.value = '';
       focusSearchInput();
     }
 
-    function executeSearch({clearAfter = false} = {}) {
+    function executeSearch({clearAfter = false, announceFound = false} = {}) {
       const query = input.value;
       if (typeof originalSearchHandler === 'function') {
         originalSearchHandler.call(input, new Event('input'));
@@ -42,15 +54,15 @@
       if (window.EquipmentRegistry && typeof window.EquipmentRegistry.appendSearchResults === 'function') {
         window.EquipmentRegistry.appendSearchResults(query, results);
       }
+      if (announceFound) announceFoundResult(query);
       if (clearAfter && String(query).trim()) prepareForNextSearch();
     }
 
     function automaticSearch(event) {
       const query = input.value;
-      executeSearch();
-      if (!event?.isComposing && isCompleteAutomaticQuery(query)) {
-        prepareForNextSearch();
-      }
+      const complete = !event?.isComposing && isCompleteAutomaticQuery(query);
+      executeSearch({announceFound: complete});
+      if (complete) prepareForNextSearch();
     }
 
     function manualWaitingMessage() {
@@ -70,11 +82,11 @@
       help.classList.toggle('manual', !automatic);
 
       if (automatic) {
-        help.textContent = 'Busca al escanear. Al completar Host SN o UA, conserva el resultado, limpia el campo y queda listo para el siguiente.';
+        help.textContent = 'Busca al escanear. Si encuentra un equipo o dato indexado emite una alerta; al completar Host SN o UA limpia el campo y queda listo para el siguiente.';
         input.oninput = automaticSearch;
         automaticSearch();
       } else {
-        help.textContent = 'La búsqueda solo se ejecuta al pulsar Buscar o ENTER.';
+        help.textContent = 'La búsqueda solo se ejecuta al pulsar Buscar o ENTER. Si hay coincidencias emite una alerta sonora.';
         input.oninput = manualWaitingMessage;
         manualWaitingMessage();
       }
@@ -84,18 +96,18 @@
 
     autoBtn.addEventListener('click', () => setSearchMode('automatic'));
     manualBtn.addEventListener('click', () => setSearchMode('manual'));
-    runBtn.addEventListener('click', executeSearch);
+    runBtn.addEventListener('click', () => executeSearch({announceFound:true}));
 
     input.addEventListener('keydown', event => {
       if (event.key !== 'Enter' || event.isComposing) return;
       event.preventDefault();
 
       if (searchMode === 'manual') {
-        executeSearch();
+        executeSearch({announceFound:true});
         return;
       }
 
-      if (input.value.trim()) executeSearch({clearAfter:true});
+      if (input.value.trim()) executeSearch({clearAfter:true, announceFound:true});
       else focusSearchInput();
     });
 
@@ -104,7 +116,9 @@
       executeSearch,
       setSearchMode,
       prepareForNextSearch,
-      isCompleteAutomaticQuery
+      isCompleteAutomaticQuery,
+      hasSearchHit,
+      announceFoundResult
     };
     setSearchMode('automatic');
   });
