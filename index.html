@@ -1,9 +1,10 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-build="20260831-matchlocation1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#090d14">
+  <meta name="app-build" content="20260831-matchlocation1">
   <title>REGISTRO Y VERIFICACION</title>
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
@@ -23,6 +24,12 @@
           auto!important;
       }
     }
+  </style>
+  <style id="match-location-styles">
+    .location-import-group{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+    .location-import-group select{min-height:34px;border:1px solid var(--line,#263247);border-radius:8px;background:var(--panel,#111827);color:var(--text,#edf3fb);padding:0 8px;font:inherit}
+    #locationSourceStatus{margin-top:7px}
+    @media(max-width:720px){.location-import-group{width:100%}.location-import-group select,.location-import-group button{flex:1 1 145px}}
   </style>
   <style id="coauthor-credits-styles">
     .app-footer{max-width:1780px;margin:0 auto;padding:0 22px 22px;color:var(--muted,#94a3b8);text-align:center;font-size:10px;line-height:1.6}
@@ -66,15 +73,25 @@
       <div class="panel-head register-panel-head">
         <div>
           <h2>Registro operativo</h2>
-          <p>Escanea Host SN → ENTER → UA → ENTER</p>
+          <p>Match válido únicamente cuando coinciden Host SN + UA</p>
         </div>
         <div class="operational-actions" aria-label="Acciones de sesión e importación/exportación">
           <span class="mini-badge">Modo escáner</span>
           <button id="newSessionBtn" class="ghost danger compact-action" type="button">Nueva sesión</button>
-          <button id="importBtn" class="secondary compact-action" type="button">Importar archivo</button>
+          <button id="importBtn" class="secondary compact-action" type="button">Cargar Excel Match</button>
+          <div class="location-import-group" aria-label="Base TXT de ubicación">
+            <select id="locationDirection" aria-label="Tipo de base TXT">
+              <option value="auto">TXT · detectar Entrada/Salida</option>
+              <option value="entrada">TXT · Entrada/Ingreso</option>
+              <option value="salida">TXT · Salida</option>
+              <option value="base">TXT · Base general</option>
+            </select>
+            <button id="locationImportBtn" class="secondary compact-action" type="button">Cargar TXT ubicación</button>
+          </div>
           <button id="exportMatchesTxtBtn" class="secondary compact-action" type="button">Exportar matches TXT</button>
           <button id="exportBtn" class="primary compact-action" type="button">Exportar Excel</button>
-          <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,.txt,.log,.json,.xml,.html,.htm,.md,.dat,.ini,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.oasis.opendocument.spreadsheet,text/plain,text/csv,text/tab-separated-values,application/json,application/xml,text/xml,text/html,text/markdown" hidden>
+          <input id="fileInput" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.oasis.opendocument.spreadsheet,text/csv,text/tab-separated-values" hidden>
+          <input id="locationFileInput" type="file" accept=".txt,.log,.dat,text/plain" hidden>
         </div>
       </div>
       <div class="mode-switch">
@@ -83,14 +100,14 @@
       </div>
       <div class="register-grid">
         <label><span>Host SN <small>12 caracteres · inicia M</small></span><input id="hostInput" class="code" autocomplete="off" placeholder="M91612EQNA60"></label>
-        <label><span>UA / Unit Address <small>16 dígitos · 16 ceros = UA desconocida</small></span><input id="uaInput" class="code" autocomplete="off" placeholder="0000000000000000"></label>
+        <label><span>UA / Unit Address <small>16 dígitos · debe iniciar 0000</small></span><input id="uaInput" class="code" autocomplete="off" placeholder="0000000000000000"></label>
         <button id="registerBtn" class="primary big">Verificar / Registrar</button>
       </div>
       <div id="resultPanel" class="result neutral"><div class="result-icon">⌁</div><div><h3>Listo para verificar</h3><p>Selecciona Carcasa o Equipo y escanea los dos códigos.</p></div></div>
     </article>
 
     <aside class="panel search-panel">
-      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Registros + contenido de archivos indexados</p></div></div>
+      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Registros + Excel indexado + bases TXT de Entrada/Salida</p></div></div>
       <div class="search-pad">
         <div class="search-mode-switch" role="group" aria-label="Modo de búsqueda">
           <button id="searchModeAuto" class="search-mode-btn active" type="button">Automático</button>
@@ -102,6 +119,7 @@
         </div>
         <div id="searchModeHelp" class="search-mode-help">Busca mientras escribes o escaneas.</div>
         <div id="fileIndexStatus" class="file-index-status"><span class="file-index-dot"></span><span>Sin archivos indexados</span></div>
+        <div id="locationSourceStatus" class="file-index-status"><span class="file-index-dot"></span><span>Sin bases TXT de ubicación</span></div>
         <div id="searchResults" class="search-results"><div class="empty">Sin búsqueda activa.</div></div>
       </div>
     </aside>
@@ -173,7 +191,7 @@
     </div>
     <div id="workspaceBody"></div>
   </section>
-  <p class="footnote">Los datos de cada operador se conservan localmente en este navegador. Exporta también tus respaldos antes de cambiar de equipo o limpiar los datos del navegador.</p>
+  <p class="footnote">El Excel define pendientes de Match; las bases TXT indican dónde aparece cada par Serial + UA. El Match solo se confirma cuando ambos identificadores coinciden.</p>
 </main>
 
 <footer class="app-footer" aria-label="Créditos de desarrollo">
@@ -187,11 +205,12 @@
 
 <div id="editModal" class="modal"><div class="modal-card small"><div class="modal-head"><h2>Corregir registro</h2><button data-close="editModal">×</button></div><div class="modal-body edit-grid"><input id="editId" type="hidden"><label>Tipo<select id="editType"><option>Carcasa</option><option>Equipo</option></select></label><label>Host SN<input id="editHost" class="code"></label><label>UA<input id="editUA" class="code"></label></div><div class="modal-foot"><button class="secondary" data-close="editModal">Cancelar</button><button id="saveEdit" class="primary">Guardar corrección</button></div></div></div>
 
-<div id="importModal" class="modal"><div class="modal-card"><div class="modal-head"><h2>Importar Excel</h2><button data-close="importModal">×</button></div><div class="modal-body"><div id="importSummary" class="import-summary"></div><div id="importBlocks"></div></div><div class="modal-foot"><button class="secondary" data-close="importModal">Cancelar</button><button id="runImport" class="primary">Importar y procesar</button></div></div></div>
+<div id="importModal" class="modal"><div class="modal-card"><div class="modal-head"><h2>Importar Excel de pendientes</h2><button data-close="importModal">×</button></div><div class="modal-body"><div id="importSummary" class="import-summary"></div><div id="importBlocks"></div></div><div class="modal-foot"><button class="secondary" data-close="importModal">Cancelar</button><button id="runImport" class="primary">Importar y procesar</button></div></div></div>
 
 <div id="toast" class="toast"></div>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="app.js?v=b2b27e9"></script>
+<script src="match-data-contract.js?v=20260831-matchlocation1"></script>
+<script src="app.js?v=20260831-matchlocation1"></script>
 <script src="search-mode.js"></script>
 <script src="file-index.js"></script>
 <script src="matches-export.js"></script>
