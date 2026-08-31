@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="es" data-build="20260831-matchlocation1">
+<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#090d14">
   <meta name="app-build" content="20260831-matchlocation1">
+  <meta name="app-navigation-version" content="20260831-appnav1">
   <title>REGISTRO Y VERIFICACION</title>
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
@@ -44,6 +45,17 @@
     @media(max-width:900px){.app-footer{padding:0 12px 18px;font-size:9.5px}}
     @media print{.app-footer,#creditsModal{display:none!important}}
   </style>
+  <style id="app-suite-navigation-styles">
+    .app-suite-nav{display:flex;align-items:center;justify-content:center;gap:6px;min-width:300px}
+    .app-suite-link{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:8px 11px;border:1px solid var(--line2,#334158);border-radius:9px;background:#111a27;color:#b9c6d6;text-decoration:none;font-size:10px;font-weight:800;line-height:1;white-space:nowrap;transition:background .18s,border-color .18s,transform .18s}
+    .app-suite-link:hover{background:#18263a;border-color:#4f8cff;color:#eaf2ff;transform:translateY(-1px)}
+    .app-suite-link.active{background:linear-gradient(180deg,#1d4072,#18325a);border-color:#4f8cff;color:#fff;box-shadow:0 4px 12px rgba(47,111,228,.22)}
+    .app-suite-link-mark{width:22px;height:22px;display:grid;place-items:center;border-radius:6px;background:rgba(255,255,255,.07);font-size:9px;font-weight:900}
+    .app-suite-link.active .app-suite-link-mark{background:rgba(255,255,255,.14)}
+    @media(max-width:1180px){.topbar{flex-wrap:wrap}.app-suite-nav{order:3;width:100%;min-width:0}.top-actions{margin-left:auto}}
+    @media(max-width:620px){.topbar{padding:10px 12px;gap:9px}.brand-mark{width:36px;height:36px}.brand h1{font-size:14px}.app-suite-nav{display:grid;grid-template-columns:1fr 1fr}.app-suite-link{width:100%;min-width:0;padding:8px 7px}.top-actions{max-width:100%;overflow-x:auto}}
+    @media print{.app-suite-nav{display:none!important}}
+  </style>
 </head>
 <body>
 <header class="topbar">
@@ -51,6 +63,10 @@
     <div class="brand-mark">M</div>
     <div><h1>REGISTRO Y VERIFICACION</h1><p>Carcasa ↔ Equipo · Host SN + UA</p></div>
   </div>
+  <nav class="app-suite-nav" aria-label="Cambiar de aplicación" data-nav-version="20260831-appnav1">
+    <a class="app-suite-link" href="https://josantoboy-debug.github.io/generador-pdt/"><span class="app-suite-link-mark" aria-hidden="true">G</span><span>Generador PDT</span></a>
+    <a class="app-suite-link active" aria-current="page" href="https://josantoboy-debug.github.io/match-equipos/"><span class="app-suite-link-mark" aria-hidden="true">M</span><span>Match Equipos</span></a>
+  </nav>
   <div class="top-actions">
     <span id="sessionBadge" class="badge session-badge-hidden" aria-hidden="true">Sesión en memoria</span>
   </div>
