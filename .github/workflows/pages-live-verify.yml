@@ -2,7 +2,9 @@ name: Live Pages verification
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - repair/pages-live-verify-20260831
   workflow_dispatch:
 
 permissions:
@@ -15,48 +17,81 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read expected build marker
-        id: build
+      - name: Read expected deployment markers
+        id: markers
         shell: bash
         run: |
           set -euo pipefail
           build=$(sed -n 's/.*data-build="\([^"]*\)".*/\1/p' index.html | head -1)
+          theme=$(grep -o 'theme-control.css?v=[^"&]*' index.html | head -1 | cut -d= -f2)
+          admin_version=$(grep -o 'admin-reset-pin.js?v=[^"&]*' admin-reset-pin.html | head -1 | cut -d= -f2)
           test -n "$build"
+          test -n "$theme"
+          test -n "$admin_version"
           echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "theme=$theme" >> "$GITHUB_OUTPUT"
+          echo "admin_version=$admin_version" >> "$GITHUB_OUTPUT"
           echo "Expected build: $build"
+          echo "Expected theme: $theme"
+          echo "Expected admin asset: $admin_version"
 
       - name: Verify public GitHub Pages HTTP 200 and deployed assets
         env:
-          EXPECTED_BUILD: ${{ steps.build.outputs.build }}
+          EXPECTED_BUILD: ${{ steps.markers.outputs.build }}
+          EXPECTED_THEME: ${{ steps.markers.outputs.theme }}
+          EXPECTED_ADMIN_VERSION: ${{ steps.markers.outputs.admin_version }}
           PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
         shell: bash
         run: |
           set -euo pipefail
+
+          verify_attempt() {
+            local nonce="$1"
+            local code theme_code admin_code
+
+            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?verify=${nonce}" || true)
+            [ "$code" = "200" ] || return 1
+            grep -F "data-build=\"${EXPECTED_BUILD}\"" /tmp/live.html >/dev/null || return 1
+            grep -F "match-data-contract.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null || return 1
+            grep -F "app.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null || return 1
+            grep -F "theme-control.css?v=${EXPECTED_THEME}" /tmp/live.html >/dev/null || return 1
+
+            curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}match-data-contract.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/contract.js || return 1
+            curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js || return 1
+            grep -F 'root.MatchDataContract=api' /tmp/contract.js >/dev/null || return 1
+            grep -F 'const Contract = window.MatchDataContract;' /tmp/app.js >/dev/null || return 1
+            grep -F 'findCounterpart' /tmp/app.js >/dev/null || return 1
+            grep -F 'carcasa.host!==equipo.host || carcasa.uaNorm!==equipo.uaNorm' /tmp/app.js >/dev/null || return 1
+
+            theme_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/theme.css -w '%{http_code}' "${PUBLIC_URL}theme-control.css?v=${EXPECTED_THEME}&verify=${nonce}" || true)
+            [ "$theme_code" = "200" ] || return 1
+            grep -F "Light design system version: ${EXPECTED_THEME}" /tmp/theme.css >/dev/null || return 1
+            grep -F -- '--accent:#2563eb' /tmp/theme.css >/dev/null || return 1
+            grep -F -- '--placeholder:#667085' /tmp/theme.css >/dev/null || return 1
+
+            admin_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/admin-reset.html -w '%{http_code}' "${PUBLIC_URL}admin-reset-pin.html?v=${EXPECTED_ADMIN_VERSION}&verify=${nonce}" || true)
+            [ "$admin_code" = "200" ] || return 1
+            grep -F 'Administración de PIN' /tmp/admin-reset.html >/dev/null || return 1
+            grep -F "admin-reset-pin.js?v=${EXPECTED_ADMIN_VERSION}" /tmp/admin-reset.html >/dev/null || return 1
+            curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}admin-reset-pin.js?v=${EXPECTED_ADMIN_VERSION}&verify=${nonce}" -o /tmp/admin-reset.js || return 1
+            grep -F 'functions/v1/operator-api' /tmp/admin-reset.js >/dev/null || return 1
+            grep -F "api('login'" /tmp/admin-reset.js >/dev/null || return 1
+            grep -F "api('reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
+            grep -F "api('emergency_reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
+
+            echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=${code} build=${EXPECTED_BUILD} theme_http=${theme_code} theme=${EXPECTED_THEME} admin_http=${admin_code} admin_version=${EXPECTED_ADMIN_VERSION}"
+            return 0
+          }
+
           ok=0
           for attempt in {1..36}; do
             nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
-            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?verify=${nonce}" || true)
-            if [ "$code" = "200" ] && grep -F "data-build=\"${EXPECTED_BUILD}\"" /tmp/live.html >/dev/null; then
-              grep -F "match-data-contract.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null
-              grep -F "app.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null
-              curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "${PUBLIC_URL}match-data-contract.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/contract.js
-              curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js
-              grep -F 'MatchDataContract' /tmp/contract.js >/dev/null
-              grep -F 'MatchEquiposCore' /tmp/app.js >/dev/null
-
-              admin_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/admin-reset.html -w '%{http_code}' "${PUBLIC_URL}admin-reset-pin.html?v=20260831-1&verify=${nonce}" || true)
-              test "$admin_code" = "200"
-              grep -F 'Administración de PIN' /tmp/admin-reset.html >/dev/null
-              grep -F 'admin-reset-pin.js?v=20260831-1' /tmp/admin-reset.html >/dev/null
-              curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}admin-reset-pin.js?v=20260831-1&verify=${nonce}" -o /tmp/admin-reset.js
-              grep -F 'core_admin_reset_pin_service' /tmp/admin-reset.js >/dev/null
-              grep -F 'core_operator_login_service' /tmp/admin-reset.js >/dev/null
-
-              echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=200 build=${EXPECTED_BUILD} admin_http=${admin_code} admin_version=20260831-1"
+            if verify_attempt "$nonce"; then
               ok=1
               break
             fi
-            echo "Attempt ${attempt}: http=${code}; waiting for build ${EXPECTED_BUILD}"
+            echo "Attempt ${attempt}: public deployment not fully ready; retrying build=${EXPECTED_BUILD} theme=${EXPECTED_THEME}"
             sleep 5
           done
+
           test "$ok" = "1"
