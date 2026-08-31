@@ -1,5 +1,6 @@
 /* UNITCHECK header branding
  * Brand version: 20260831-unitcheck1
+ * Official logo asset plus matching /favicon.ico prevent branding-related 404s.
  * Visual-only overrides. No application behavior is changed here.
  */
 .topbar{padding-top:8px;padding-bottom:8px}
