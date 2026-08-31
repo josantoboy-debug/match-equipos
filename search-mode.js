@@ -1,6 +1,8 @@
 (() => {
   'use strict';
 
+  const SEARCH_MODE_VERSION = '20260831-autoclear1';
+
   document.addEventListener('DOMContentLoaded', () => {
     const input = document.querySelector('#searchInput');
     const results = document.querySelector('#searchResults');
@@ -14,15 +16,40 @@
     const originalSearchHandler = input.oninput;
     let searchMode = 'automatic';
 
-    function executeSearch() {
+    function focusSearchInput() {
+      try { input.focus({preventScroll:true}); }
+      catch { input.focus(); }
+    }
+
+    function isCompleteAutomaticQuery(value) {
+      const query = String(value ?? '').trim().toUpperCase();
+      return /^M[A-Z0-9]{11}$/.test(query) || /^0000[0-9]{12}$/.test(query);
+    }
+
+    function prepareForNextSearch() {
+      input.value = '';
+      focusSearchInput();
+    }
+
+    function executeSearch({clearAfter = false} = {}) {
+      const query = input.value;
       if (typeof originalSearchHandler === 'function') {
         originalSearchHandler.call(input, new Event('input'));
       }
       if (window.FileIndexSearch && typeof window.FileIndexSearch.appendResults === 'function') {
-        window.FileIndexSearch.appendResults(input.value, results);
+        window.FileIndexSearch.appendResults(query, results);
       }
       if (window.EquipmentRegistry && typeof window.EquipmentRegistry.appendSearchResults === 'function') {
-        window.EquipmentRegistry.appendSearchResults(input.value, results);
+        window.EquipmentRegistry.appendSearchResults(query, results);
+      }
+      if (clearAfter && String(query).trim()) prepareForNextSearch();
+    }
+
+    function automaticSearch(event) {
+      const query = input.value;
+      executeSearch();
+      if (!event?.isComposing && isCompleteAutomaticQuery(query)) {
+        prepareForNextSearch();
       }
     }
 
@@ -43,8 +70,8 @@
       help.classList.toggle('manual', !automatic);
 
       if (automatic) {
-        help.textContent = 'Busca en registros, cajas y archivos indexados mientras escribes o escaneas.';
-        input.oninput = executeSearch;
+        help.textContent = 'Busca al escanear. Al completar Host SN o UA, conserva el resultado, limpia el campo y queda listo para el siguiente.';
+        input.oninput = automaticSearch;
         executeSearch();
       } else {
         help.textContent = 'La búsqueda solo se ejecuta al pulsar Buscar o ENTER.';
@@ -52,7 +79,7 @@
         manualWaitingMessage();
       }
 
-      input.focus();
+      focusSearchInput();
     }
 
     autoBtn.addEventListener('click', () => setSearchMode('automatic'));
@@ -60,13 +87,25 @@
     runBtn.addEventListener('click', executeSearch);
 
     input.addEventListener('keydown', event => {
-      if (searchMode === 'manual' && event.key === 'Enter') {
-        event.preventDefault();
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault();
+
+      if (searchMode === 'manual') {
         executeSearch();
+        return;
       }
+
+      if (input.value.trim()) executeSearch({clearAfter:true});
+      else focusSearchInput();
     });
 
-    window.MatchSearchModes = { executeSearch, setSearchMode };
+    window.MatchSearchModes = {
+      version: SEARCH_MODE_VERSION,
+      executeSearch,
+      setSearchMode,
+      prepareForNextSearch,
+      isCompleteAutomaticQuery
+    };
     setSearchMode('automatic');
   });
 })();
