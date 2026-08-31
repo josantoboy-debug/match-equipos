@@ -1,0 +1,354 @@
+name: UI sounds gate
+
+on:
+  push:
+    branches:
+      - main
+      - repair/ui-sounds-20260831
+    paths:
+      - 'ui-sounds.js'
+      - 'search-mode.js'
+      - 'index.html'
+      - '.github/workflows/ui-sounds-gate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'ui-sounds.js'
+      - 'search-mode.js'
+      - 'index.html'
+      - '.github/workflows/ui-sounds-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ui-sounds:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate every JavaScript file
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find . -maxdepth 1 -type f -name '*.js' -print0)
+
+      - name: Validate local CSS and JavaScript references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path('index.html').read_text(encoding='utf-8')
+          refs = re.findall(r'(?:src|href)="([^"]+)"', html)
+          missing = []
+          for ref in refs:
+              if ref.startswith(('http://','https://','data:','#','mailto:')):
+                  continue
+              path = ref.split('?',1)[0].split('#',1)[0]
+              if path and not Path(path).exists():
+                  missing.append(ref)
+          if missing:
+              raise SystemExit('Missing local references: ' + ', '.join(missing))
+          print('LOCAL_REFERENCES_OK')
+          PY
+
+      - name: Validate versions and fragile patterns
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "UI_SOUND_VERSION = '20260831-sound1'" ui-sounds.js
+          grep -F "SEARCH_MODE_VERSION = '20260831-autoclear2-sound1'" search-mode.js
+          grep -F 'data-ui-sound-version="20260831-sound1"' index.html
+          grep -F '<meta name="ui-sound-version" content="20260831-sound1">' index.html
+          grep -F 'ui-sounds.js?v=20260831-sound1' index.html
+          grep -F 'search-mode.js?v=20260831-autoclear2-sound1' index.html
+          grep -F 'registrationSnapshot' ui-sounds.js
+          grep -F 'announceFoundResult' search-mode.js
+          if grep -F 'search-mode.js?v=20260831-autoclear1' index.html; then
+            echo 'Old search module cache reference found'
+            exit 1
+          fi
+          if grep -F '<script src="ui-sounds.js"></script>' index.html; then
+            echo 'Unversioned UI sound module reference found'
+            exit 1
+          fi
+          if grep -Eq 'document\.write|MutationObserver|location\.reload|setInterval' ui-sounds.js search-mode.js; then
+            echo 'Unexpected fragile DOM/reload/observer loop pattern'
+            exit 1
+          fi
+          if grep -Eq '\bfetch\s*\(|XMLHttpRequest|supabase|service_role|secret|private[_-]?key' ui-sounds.js; then
+            echo 'UI sound module must remain offline-only and credential-free'
+            exit 1
+          fi
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Create isolated sound and search harness
+        shell: bash
+        run: |
+          cat > ui-sounds-harness.tmp.html <<'HTML'
+          <!doctype html>
+          <html lang="es">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <link rel="icon" href="data:,">
+          </head>
+          <body>
+            <button id="registerBtn" type="button">Registrar</button>
+            <button id="equipmentAddBtn" type="button">Agregar equipo</button>
+            <input id="uaInput">
+            <input id="equipmentUA">
+            <input id="equipmentBox">
+
+            <button id="searchModeAuto" class="active" type="button">Automático</button>
+            <button id="searchModeManual" type="button">Manual</button>
+            <input id="searchInput" autocomplete="off">
+            <button id="searchRunBtn" type="button" hidden>Buscar</button>
+            <div id="searchModeHelp"></div>
+            <div id="searchResults"><div class="empty">Sin búsqueda activa.</div></div>
+
+            <script>
+              window.__audioStarts = [];
+              class FakeParam {
+                setValueAtTime(value){ this.value = value; }
+                exponentialRampToValueAtTime(value){ this.value = value; }
+              }
+              class FakeOscillator {
+                constructor(){ this.frequency = new FakeParam(); this.type = 'sine'; }
+                connect(){}
+                start(when){ window.__audioStarts.push({frequency:this.frequency.value,type:this.type,when}); }
+                stop(){}
+              }
+              class FakeGain {
+                constructor(){ this.gain = new FakeParam(); }
+                connect(){}
+              }
+              class FakeAudioContext {
+                constructor(){ this.state='running'; this.currentTime=0; this.destination={}; }
+                createOscillator(){ return new FakeOscillator(); }
+                createGain(){ return new FakeGain(); }
+                async resume(){ this.state='running'; }
+              }
+              window.AudioContext = FakeAudioContext;
+
+              let matchCount = 0;
+              let boxCount = 0;
+              window.MatchEquiposCore = {getState(){ return {records:Array.from({length:matchCount},(_,i)=>({id:i}))}; }};
+              window.EquipmentRegistry = {
+                getRows(){ return Array.from({length:boxCount},(_,i)=>({id:i})); },
+                appendSearchResults(query,node){
+                  if(query === 'M91616EQ4607') node.insertAdjacentHTML('beforeend','<div class="search-card">BOX HIT</div>');
+                }
+              };
+
+              document.querySelector('#registerBtn').addEventListener('click', event => {
+                if(event.currentTarget.dataset.success === '1') matchCount++;
+              });
+              document.querySelector('#equipmentAddBtn').addEventListener('click', event => {
+                if(event.currentTarget.dataset.success === '1') boxCount++;
+              });
+              for(const id of ['uaInput','equipmentUA','equipmentBox']){
+                document.querySelector('#'+id).addEventListener('keydown', event => {
+                  if(event.key !== 'Enter' || event.currentTarget.dataset.success !== '1') return;
+                  if(id === 'uaInput') matchCount++;
+                  else boxCount++;
+                });
+              }
+
+              const searchInput=document.querySelector('#searchInput');
+              const searchResults=document.querySelector('#searchResults');
+              searchInput.oninput=()=>{
+                const q=searchInput.value;
+                searchResults.innerHTML = q === 'M91616EQ4607'
+                  ? '<div class="search-card">CORE HIT</div>'
+                  : '<div class="empty">No encontrado.</div>';
+              };
+              window.FileIndexSearch={appendResults(query,node){
+                if(query === 'M91616EQ4607') node.insertAdjacentHTML('beforeend','<div class="file-index-section"><div class="search-card">FILE HIT</div></div>');
+              }};
+            </script>
+            <script src="ui-sounds.js?v=20260831-sound1"></script>
+            <script src="search-mode.js?v=20260831-autoclear2-sound1"></script>
+          </body>
+          </html>
+          HTML
+
+      - name: Start local application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4179 --bind 127.0.0.1 > /tmp/ui-sounds-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4179/ui-sounds-harness.tmp.html >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/ui-sounds-http.log
+          exit 1
+
+      - name: Desktop tablet mobile sound behavior
+        shell: bash
+        run: |
+          cat > /tmp/ui-sounds-smoke.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const viewports=[
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+          const FOUND='M91616EQ4607';
+          const MISS='M91616EQ9999';
+
+          const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+          (async()=>{
+            const browser=await puppeteer.launch({
+              headless:true,
+              executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',
+              args:['--no-sandbox','--disable-setuid-sandbox']
+            });
+
+            for(const viewport of viewports){
+              const page=await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const pageErrors=[];
+              const consoleErrors=[];
+              page.on('pageerror',error=>pageErrors.push(String(error)));
+              page.on('console',msg=>{if(msg.type()==='error')consoleErrors.push(msg.text());});
+
+              await page.setCacheEnabled(false);
+              await page.goto(`http://127.0.0.1:4179/ui-sounds-harness.tmp.html?v=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(()=>window.MatchUISounds?.version==='20260831-sound1' && window.MatchSearchModes?.version==='20260831-autoclear2-sound1');
+
+              let state=await page.evaluate(()=>({
+                soundVersion:MatchUISounds.version,
+                searchVersion:MatchSearchModes.version,
+                focused:document.activeElement?.id,
+                overflow:document.documentElement.scrollWidth>innerWidth
+              }));
+              assert.deepStrictEqual(state,{
+                soundVersion:'20260831-sound1',
+                searchVersion:'20260831-autoclear2-sound1',
+                focused:'searchInput',
+                overflow:false
+              });
+
+              await page.type('#searchInput',FOUND);
+              await page.waitForFunction(()=>document.querySelector('#searchInput').value==='');
+              await sleep(30);
+              let frequencies=await page.evaluate(()=>__audioStarts.map(x=>x.frequency));
+              assert.deepStrictEqual(frequencies.slice(0,2),[880,1175]);
+              state=await page.evaluate(()=>({text:searchResults.textContent,focused:document.activeElement?.id}));
+              assert(state.text.includes('CORE HIT'));
+              assert(state.text.includes('FILE HIT'));
+              assert(state.text.includes('BOX HIT'));
+              assert.strictEqual(state.focused,'searchInput');
+
+              await sleep(220);
+              await page.type('#searchInput',MISS);
+              await page.waitForFunction(()=>document.querySelector('#searchInput').value==='');
+              await sleep(30);
+              frequencies=await page.evaluate(()=>__audioStarts.map(x=>x.frequency));
+              assert.strictEqual(frequencies.length,2,'No encontrado must remain silent');
+
+              await sleep(260);
+              await page.evaluate(()=>{document.querySelector('#registerBtn').dataset.success='0';});
+              await page.click('#registerBtn');
+              await sleep(30);
+              frequencies=await page.evaluate(()=>__audioStarts.map(x=>x.frequency));
+              assert.strictEqual(frequencies.length,2,'Failed registration must remain silent');
+
+              await page.evaluate(()=>{document.querySelector('#registerBtn').dataset.success='1';});
+              await page.click('#registerBtn');
+              await sleep(30);
+              frequencies=await page.evaluate(()=>__audioStarts.map(x=>x.frequency));
+              assert.deepStrictEqual(frequencies.slice(-3),[523.25,659.25,783.99]);
+
+              await sleep(260);
+              await page.evaluate(()=>{const input=document.querySelector('#equipmentUA');input.dataset.success='1';input.focus();});
+              await page.keyboard.press('Enter');
+              await sleep(30);
+              frequencies=await page.evaluate(()=>__audioStarts.map(x=>x.frequency));
+              assert.deepStrictEqual(frequencies.slice(-3),[523.25,659.25,783.99]);
+
+              await sleep(220);
+              await page.setOfflineMode(true);
+              const beforeOffline=frequencies.length;
+              const offlinePlayed=await page.evaluate(()=>MatchUISounds.playFound());
+              await sleep(30);
+              frequencies=await page.evaluate(()=>__audioStarts.map(x=>x.frequency));
+              assert.strictEqual(offlinePlayed,true);
+              assert.deepStrictEqual(frequencies.slice(beforeOffline),[880,1175]);
+              await page.setOfflineMode(false);
+
+              await page.setCacheEnabled(true);
+              await page.reload({waitUntil:'domcontentloaded'});
+              await page.waitForFunction(()=>window.MatchUISounds?.version==='20260831-sound1' && window.MatchSearchModes?.version==='20260831-autoclear2-sound1');
+
+              const responsive=await Promise.race([
+                page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('ok'),100))),
+                new Promise((_,reject)=>setTimeout(()=>reject(new Error('Browser event loop blocked')),2000))
+              ]);
+              assert.strictEqual(responsive,'ok');
+              assert.deepStrictEqual(pageErrors,[]);
+              assert.deepStrictEqual(consoleErrors,[]);
+              await page.close();
+            }
+
+            await browser.close();
+            console.log('UI_SOUNDS_GATE_OK');
+          })().catch(error=>{console.error(error);process.exit(1);});
+          NODE
+          node /tmp/ui-sounds-smoke.cjs
+
+      - name: Remove runner-only harness
+        if: always()
+        run: rm -f ui-sounds-harness.tmp.html
+
+  verify-public-ui-sounds:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: ui-sounds
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Verify public HTTP 200 and sound versions with cache disabled
+        shell: bash
+        env:
+          PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
+          SOUND_VERSION: 20260831-sound1
+          SEARCH_VERSION: 20260831-autoclear2-sound1
+        run: |
+          set -uo pipefail
+          ok=0
+          for attempt in {1..36}; do
+            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?verify=${nonce}" || true)
+            if [ "$code" = "200" ] && \
+               grep -F "data-ui-sound-version=\"${SOUND_VERSION}\"" /tmp/live.html >/dev/null && \
+               grep -F "ui-sounds.js?v=${SOUND_VERSION}" /tmp/live.html >/dev/null && \
+               grep -F "search-mode.js?v=${SEARCH_VERSION}" /tmp/live.html >/dev/null; then
+              sound_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/ui-sounds.js -w '%{http_code}' "${PUBLIC_URL}ui-sounds.js?v=${SOUND_VERSION}&verify=${nonce}" || true)
+              search_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/search-mode.js -w '%{http_code}' "${PUBLIC_URL}search-mode.js?v=${SEARCH_VERSION}&verify=${nonce}" || true)
+              if [ "$sound_code" = "200" ] && [ "$search_code" = "200" ] && \
+                 grep -F "UI_SOUND_VERSION = '${SOUND_VERSION}'" /tmp/ui-sounds.js >/dev/null && \
+                 grep -F 'playRegistered' /tmp/ui-sounds.js >/dev/null && \
+                 grep -F 'playFound' /tmp/ui-sounds.js >/dev/null && \
+                 grep -F "SEARCH_MODE_VERSION = '${SEARCH_VERSION}'" /tmp/search-mode.js >/dev/null; then
+                echo "UI_SOUNDS_LIVE_OK url=${PUBLIC_URL} http=${code} sound_http=${sound_code} search_http=${search_code} sound=${SOUND_VERSION} search=${SEARCH_VERSION}"
+                ok=1
+                break
+              fi
+            fi
+            echo "Attempt ${attempt}: public UI sound version not ready; retrying"
+            sleep 5
+          done
+          test "$ok" = "1"
