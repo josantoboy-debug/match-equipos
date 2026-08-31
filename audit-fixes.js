@@ -5,6 +5,7 @@
   const MAX_PER_BOX = 64;
   const THEME_ASSET_VERSION = '20260831-light2';
   const TTS_ASSET_VERSION = '20260831-critical4';
+  const REGISTER_DEFAULT_MODE_VERSION = '20260831-josueauto1';
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
@@ -58,6 +59,20 @@
     script.async = false;
     script.onload = () => window.MatchCriticalWarnings?.bind?.();
     script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-critical-warnings.js');
+    document.body.appendChild(script);
+  }
+
+  function loadEquipmentDefaultMode() {
+    if (window.EquipmentCaptureDefaults || document.querySelector('script[data-equipment-default-mode]')) {
+      window.EquipmentCaptureDefaults?.bindNewSession?.();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = `equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}`;
+    script.dataset.equipmentDefaultMode = '1';
+    script.async = false;
+    script.onload = () => window.EquipmentCaptureDefaults?.bindNewSession?.();
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-register-default-mode.js');
     document.body.appendChild(script);
   }
 
@@ -119,6 +134,7 @@
   function loadEquipmentNewSession() {
     if (window.EquipmentNewSession || document.querySelector('script[data-equipment-new-session]')) {
       window.EquipmentNewSession?.install?.();
+      loadEquipmentDefaultMode();
       return;
     }
     const script = document.createElement('script');
@@ -128,6 +144,7 @@
     script.onload = () => {
       window.EquipmentNewSession?.install?.();
       loadCriticalWarnings();
+      loadEquipmentDefaultMode();
     };
     script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-new-session.js');
     document.body.appendChild(script);
@@ -183,6 +200,7 @@
     loadExportSummary();
     loadEquipmentNewSession();
     loadCriticalWarnings();
+    loadEquipmentDefaultMode();
     loadEquipmentProcessHistory();
     loadEquipmentImportContext();
     setTimeout(healthCheck, 0);
@@ -196,6 +214,7 @@
     loadExportSummary();
     loadEquipmentNewSession();
     loadCriticalWarnings();
+    loadEquipmentDefaultMode();
     loadEquipmentProcessHistory();
     loadEquipmentImportContext();
     setTimeout(healthCheck, 0);
@@ -207,6 +226,7 @@
     loadThemeControl,
     loadTTSControl,
     loadCriticalWarnings,
+    loadEquipmentDefaultMode,
     loadExportSummary,
     loadEquipmentNewSession,
     loadEquipmentProcessHistory,
