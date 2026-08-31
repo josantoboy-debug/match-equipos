@@ -1,0 +1,200 @@
+name: Operator default registration mode gate
+
+on:
+  push:
+    branches:
+      - repair/josue-auto-mode-20260831-r2
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  operator-default-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax and cache markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F 'data-registration-mode-version="20260831-josueauto1"' index.html
+          grep -F 'data-global-search-version="20260831-autoclear1"' index.html
+          grep -F 'search-mode.js?v=20260831-autoclear1' index.html
+          grep -F 'audit-fixes.js?v=20260831-josueauto1' index.html
+          grep -F "REGISTER_DEFAULT_MODE_VERSION = '20260831-josueauto1'" audit-fixes.js
+          grep -F 'equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}' audit-fixes.js
+          grep -F 'equipment-new-session.js?v=${EQUIPMENT_NEW_SESSION_VERSION}' audit-fixes.js
+          grep -F "VERSION = '20260831-josueauto1'" equipment-register-default-mode.js
+          grep -F "TARGET_OPERATOR = 'josue parfait'" equipment-register-default-mode.js
+          grep -F "equipment:new-session-created" equipment-register-default-mode.js
+          grep -F "equipment:new-session-created" equipment-new-session.js
+          ! grep -F 'audit-fixes.js?v=20260831-critical4' index.html
+          ! grep -F 'equipment-new-session.js?v=ccf3874' audit-fixes.js
+
+      - name: Unit test operator-specific default policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const assert = require('assert');
+          const listeners = {};
+          const modes = [];
+          const addListener = (type, fn) => (listeners[type] ??= []).push(fn);
+          const dispatch = (type, event = {}) => (listeners[type] || []).forEach(fn => fn(event));
+          global.setTimeout = fn => { fn(); return 1; };
+          global.document = {readyState:'complete',documentElement:{dataset:{}},addEventListener:addListener};
+          global.window = {
+            OperatorSession:{getCurrentOperator:()=>({id:'op-josue',name:'Josue Parfait'})},
+            EquipmentRegistry:{setCaptureMode(mode){modes.push(mode);}}
+          };
+          require('./equipment-register-default-mode.js');
+          const api = window.EquipmentCaptureDefaults;
+          assert(api, 'EquipmentCaptureDefaults no se publicó');
+          assert.strictEqual(api.version, '20260831-josueauto1');
+          assert.strictEqual(api.defaultModeFor({name:'Josue Parfait'}), 'automatic');
+          assert.strictEqual(api.defaultModeFor({name:'  JOSUÉ   PARFAIT '}), 'automatic');
+          assert.strictEqual(api.defaultModeFor({name:'Operador Prueba'}), 'manual');
+          assert.strictEqual(modes.at(-1), 'automatic', 'Josue debe iniciar en automático');
+          assert.strictEqual((listeners['equipment:new-session-created'] || []).length, 1, 'Debe escuchar el evento real de Nueva sesión completada');
+          modes.push('manual');
+          dispatch('equipment:new-session-created',{detail:{operator:{id:'op-josue',name:'Josue Parfait'},source:'equipment-register'}});
+          assert.strictEqual(modes.at(-1), 'automatic', 'Nueva sesión completada debe volver al predeterminado de Josue');
+          dispatch('operator:login',{detail:{id:'op-other',name:'Operador Prueba'}});
+          assert.strictEqual(modes.at(-1), 'manual', 'Otros operadores deben conservar Manual por defecto');
+          dispatch('equipment:new-session-created',{detail:{operator:{id:'op-other',name:'Operador Prueba'},source:'equipment-register'}});
+          assert.strictEqual(modes.at(-1), 'manual', 'Nueva sesión de otro operador debe permanecer en Manual');
+          console.log('OPERATOR_DEFAULT_MODE_UNIT_OK');
+          NODE
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        run: |
+          python3 -m http.server 4176 --bind 127.0.0.1 > /tmp/match-mode-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4176/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/match-mode-http.log
+          exit 1
+
+      - name: Desktop tablet mobile restored-session smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/operator-default-mode-smoke.cjs <<'NODE'
+          const assert = require('assert');
+          const puppeteer = require(process.cwd() + '/node_modules/puppeteer-core');
+          const JOSUE = {id:'00000000-0000-4000-8000-000000000111',name:'Josue Parfait',role:'operator',active:true};
+          const OTHER = {id:'00000000-0000-4000-8000-000000000222',name:'Operador Prueba',role:'operator',active:true};
+          const viewports = [
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          async function seedSession(page, operator) {
+            await page.evaluateOnNewDocument(operator => {
+              localStorage.setItem('matchEquipos.operatorAccess.v1', JSON.stringify({version:1,operators:[{
+                id:operator.id,name:operator.name,role:operator.role,active:true,cloud:true,pinHash:'fictitious-test-hash'
+              }]}));
+              sessionStorage.setItem('matchEquipos.activeOperator.v1', operator.id);
+              sessionStorage.setItem('matchEquipos.cloudOperatorSession.v1', JSON.stringify({
+                operator:{id:operator.id,name:operator.name,role:operator.role},offline:true,savedAt:new Date().toISOString()
+              }));
+            }, operator);
+          }
+
+          async function intercept(page) {
+            await page.setRequestInterception(true);
+            page.on('request', request => {
+              const url = request.url();
+              if (url.includes('/rpc/core_list_operators_service')) {
+                request.respond({status:200,contentType:'application/json',headers:{
+                  'access-control-allow-origin':'*',
+                  'access-control-allow-headers':'apikey,content-type',
+                  'access-control-allow-methods':'POST,OPTIONS'
+                },body:JSON.stringify({ok:true,bootstrapped:true,operators:[JOSUE,OTHER]})});
+              } else if (/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)) {
+                request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+              } else if (url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')) {
+                request.respond({status:400,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{"ok":false}'});
+              } else request.continue();
+            });
+          }
+
+          (async () => {
+            const browser = await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome',args:['--no-sandbox','--disable-setuid-sandbox']});
+
+            for (const viewport of viewports) {
+              const page = await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const errors=[];
+              page.on('pageerror', error => errors.push(String(error)));
+              await seedSession(page,JOSUE);
+              await intercept(page);
+              await page.goto(`http://127.0.0.1:4176/?operator-mode=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(() => window.EquipmentCaptureDefaults?.version === '20260831-josueauto1' && window.EquipmentRegistry?.getCaptureMode?.() === 'automatic' && window.OperatorSession?.getCurrentOperator?.()?.name === 'Josue Parfait',{timeout:7000});
+              const state = await page.evaluate(() => {
+                const newBtn=document.querySelector('#equipmentNewSessionBtn');
+                const rect=newBtn?.getBoundingClientRect();
+                return {
+                  mode:window.EquipmentRegistry.getCaptureMode(),
+                  buttonText:document.querySelector('#equipmentRegisterModeBtn strong')?.textContent,
+                  marker:document.documentElement.dataset.equipmentDefaultModeVersion,
+                  globalSearchMarker:document.documentElement.dataset.globalSearchVersion,
+                  operator:window.OperatorSession.getCurrentOperator()?.name,
+                  mainInert:document.querySelector('main.app')?.hasAttribute('inert'),
+                  moduleLoaded:[...document.scripts].some(s => (s.src||'').includes('equipment-register-default-mode.js?v=20260831-josueauto1')),
+                  newSessionVersioned:[...document.scripts].some(s => (s.src||'').includes('equipment-new-session.js?v=20260831-josueauto1')),
+                  searchVersioned:[...document.scripts].some(s => (s.src||'').includes('search-mode.js?v=20260831-autoclear1')),
+                  newSessionInstalled:newBtn?.dataset.safeNewSession === '1',
+                  newSessionVisible:!!rect && rect.width>0 && rect.height>0
+                };
+              });
+              assert.deepStrictEqual(state,{mode:'automatic',buttonText:'AUTOMÁTICO',marker:'20260831-josueauto1',globalSearchMarker:'20260831-autoclear1',operator:'Josue Parfait',mainInert:false,moduleLoaded:true,newSessionVersioned:true,searchVersioned:true,newSessionInstalled:true,newSessionVisible:true});
+
+              await page.evaluate(() => window.EquipmentRegistry.setCaptureMode('manual'));
+              await new Promise(resolve => setTimeout(resolve,100));
+              assert.strictEqual(await page.evaluate(() => window.EquipmentRegistry.getCaptureMode()),'manual','La selección manual del operador debe mantenerse durante la sesión');
+
+              await page.evaluate(() => { window.confirm = () => false; document.querySelector('#equipmentNewSessionBtn').click(); });
+              await new Promise(resolve => setTimeout(resolve,100));
+              assert.strictEqual(await page.evaluate(() => window.EquipmentRegistry.getCaptureMode()),'manual','Cancelar Nueva sesión no debe cambiar la elección manual');
+
+              await page.evaluate(() => { window.confirm = () => true; document.querySelector('#equipmentNewSessionBtn').click(); });
+              await page.waitForFunction(() => window.EquipmentRegistry.getCaptureMode() === 'automatic',{timeout:3000});
+
+              await Promise.race([
+                page.evaluate(() => new Promise(resolve => setTimeout(() => resolve('responsive'),100))),
+                new Promise((_,reject) => setTimeout(() => reject(new Error('Page event loop blocked')),2000))
+              ]);
+              assert.deepStrictEqual(errors,[]);
+              await page.close();
+            }
+
+            const other = await browser.newPage();
+            await other.setViewport({width:1366,height:768,deviceScaleFactor:1});
+            const otherErrors=[];
+            other.on('pageerror', error => otherErrors.push(String(error)));
+            await seedSession(other,OTHER);
+            await intercept(other);
+            await other.goto('http://127.0.0.1:4176/?operator-mode=other',{waitUntil:'domcontentloaded',timeout:15000});
+            await other.waitForFunction(() => window.EquipmentCaptureDefaults && window.EquipmentRegistry && window.OperatorSession?.getCurrentOperator?.()?.name === 'Operador Prueba',{timeout:7000});
+            assert.strictEqual(await other.evaluate(() => window.EquipmentRegistry.getCaptureMode()),'manual');
+            assert.deepStrictEqual(otherErrors,[]);
+            await other.close();
+
+            await browser.close();
+            console.log('OPERATOR_DEFAULT_MODE_BROWSER_OK');
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
+          node /tmp/operator-default-mode-smoke.cjs
