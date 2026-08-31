@@ -3,7 +3,7 @@ name: Selective TTS policy gate
 on:
   push:
     branches:
-      - repair/tts-critical3-20260831
+      - repair/tts-fixedphrases-20260831
   pull_request:
     branches:
       - main
@@ -24,19 +24,26 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' file; do node --check "$file"; done < <(find . -maxdepth 1 -name '*.js' -print0)
 
-      - name: Validate selective TTS defaults and classification
+      - name: Validate fixed TTS phrases and defaults
         shell: bash
         run: |
           set -euo pipefail
           node <<'NODE'
           const assert = require('assert');
-          let spoken = [];
+          const spoken = [];
+          const matchAnnouncements = [];
+          let matchObserverCallback = null;
+          const counter = {textContent:'0', dataset:{}};
           global.Event = class Event { constructor(type){ this.type=type; } };
-          global.MutationObserver = class { observe(){} disconnect(){} };
+          global.MutationObserver = class {
+            constructor(fn){ this.fn=fn; }
+            observe(target){ if (target === counter) matchObserverCallback=this.fn; }
+            disconnect(){}
+          };
           global.localStorage = {getItem(){return null;},setItem(){}};
           global.document = {
-            readyState:'loading',
-            querySelector(){ return null; },
+            readyState:'complete',
+            querySelector(selector){ if(selector === '#cMatches') return counter; return null; },
             querySelectorAll(){ return []; },
             addEventListener(){},
             documentElement:{dataset:{}}
@@ -44,36 +51,55 @@ jobs:
           const nativeSpeak = utterance => spoken.push(String(utterance?.text || ''));
           global.window = {
             speechSynthesis:{speak:nativeSpeak,cancel(){},getVoices(){return[];}},
-            MatchVoiceTTS:{setEnabled(){}}
+            MatchVoiceTTS:{
+              setEnabled(){},
+              announce(text, options){matchAnnouncements.push({text,options});}
+            }
           };
           require('./tts-control.js');
           const api = window.AppTTS;
           assert(api, 'AppTTS no se publicó');
-          assert.strictEqual(api.version, '20260831-critical3');
+          assert.strictEqual(api.version, '20260831-critical4');
           assert.deepStrictEqual(api.getPreference(), {welcome:false,criticalWarnings:true,alerts:false});
-          assert.strictEqual(api.isCriticalWarning('Atención. Dispositivo duplicado.'), true);
-          assert.strictEqual(api.isCriticalWarning('HOST SN INVÁLIDO. Debe comenzar con M.'), true);
-          assert.strictEqual(api.isCriticalWarning('UA inválido. Debe tener 16 dígitos.'), true);
-          assert.strictEqual(api.isCriticalWarning('El Serial existe en la contraparte, pero la UA no coincide. No se creó Match.'), true);
-          assert.strictEqual(api.isCriticalWarning('No se encontró todavía el equipo con el mismo Serial + UA.'), true);
-          assert.strictEqual(api.isCriticalWarning('Precaución. Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.'), true);
-          assert.strictEqual(api.isCriticalWarning('Equipo registrado correctamente.'), false);
-          assert.strictEqual(api.isCriticalWarning('Caja lista para imprimir.'), false);
+          assert.deepStrictEqual(api.fixedMessages, {
+            duplicate:'Precaución. Dispositivo duplicado.',
+            serial:'Error en código Serial. Host SN inválido.',
+            ua:'Error en código UA. UA inválido.',
+            match:'Los dispositivos hacen Match.',
+            newSession:'Precaución. Guarda el registro antes de iniciar otra sesión.'
+          });
+
+          assert.strictEqual(api.fixedAnnouncement('Registro duplicado bloqueado. El SERIAL M91616EQ4607 ya está registrado.'), 'Precaución. Dispositivo duplicado.');
+          assert.strictEqual(api.fixedAnnouncement('HOST SN INVÁLIDO. Debe comenzar con M.'), 'Error en código Serial. Host SN inválido.');
+          assert.strictEqual(api.fixedAnnouncement('ADVERTENCIA - UA NO CUMPLE EL FORMATO. Debe tener 16 dígitos.'), 'Error en código UA. UA inválido.');
+          assert.strictEqual(api.fixedAnnouncement('MATCH CORRECTO. Host SN y UA coinciden exactamente.'), 'Los dispositivos hacen Match.');
+          assert.strictEqual(api.fixedAnnouncement('No se encontró todavía el equipo con el mismo Serial + UA.'), null);
+          assert.strictEqual(api.fixedAnnouncement('El Serial existe en la contraparte, pero la UA no coincide. No se creó Match.'), null);
+          assert.strictEqual(api.fixedAnnouncement('Precaución. Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.'), 'Precaución. Guarda el registro antes de iniciar otra sesión.');
+
           window.speechSynthesis.speak({text:'Bienvenido, Operador'});
           window.speechSynthesis.speak({text:'Equipo registrado correctamente.'});
-          window.speechSynthesis.speak({text:'Precaución. Dispositivo duplicado.'});
-          window.speechSynthesis.speak({text:'Error en código U A. U A inválido.'});
-          window.speechSynthesis.speak({text:'Error en código Serial. Host S N inválido.'});
-          window.speechSynthesis.speak({text:'No se encontró todavía el equipo con el mismo Serial + U A.'});
+          window.speechSynthesis.speak({text:'Registro duplicado bloqueado. El SERIAL M91616EQ4607 ya está registrado.'});
+          window.speechSynthesis.speak({text:'HOST SN INVÁLIDO. Debe comenzar con M.'});
+          window.speechSynthesis.speak({text:'UA inválido. Debe tener 16 dígitos.'});
+          window.speechSynthesis.speak({text:'No se encontró todavía el equipo con el mismo Serial + UA.'});
+          window.speechSynthesis.speak({text:'MATCH CORRECTO. Host SN y UA coinciden exactamente.'});
           window.speechSynthesis.speak({text:'Precaución. Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.'});
           assert.deepStrictEqual(spoken,[
             'Precaución. Dispositivo duplicado.',
-            'Error en código U A. U A inválido.',
-            'Error en código Serial. Host S N inválido.',
-            'No se encontró todavía el equipo con el mismo Serial + U A.',
-            'Precaución. Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.'
+            'Error en código Serial. Host SN inválido.',
+            'Error en código UA. UA inválido.',
+            'Los dispositivos hacen Match.',
+            'Precaución. Guarda el registro antes de iniciar otra sesión.'
           ]);
-          console.log('MATCH_TTS_POLICY_OK', api.version, api.getPreference(), spoken.length);
+
+          assert(matchObserverCallback, 'No se instaló el observador del contador Match');
+          counter.textContent='1';
+          matchObserverCallback();
+          assert.strictEqual(matchAnnouncements.length,1);
+          assert.strictEqual(matchAnnouncements[0].text,'Los dispositivos hacen Match.');
+          assert.strictEqual(matchAnnouncements[0].options?.interrupt,true);
+          console.log('MATCH_FIXED_TTS_OK', api.version, spoken.length);
           NODE
 
       - name: Validate both new-session warning routes
@@ -102,30 +128,32 @@ jobs:
           global.MutationObserver = class { observe(){} disconnect(){} };
           global.window = {MatchVoiceTTS:{announce(text, options){announced.push({text,options});}}};
           require('./tts-critical-warnings.js');
-          assert.strictEqual(window.MatchCriticalWarnings.version, '20260831-critical3');
+          assert.strictEqual(window.MatchCriticalWarnings.version, '20260831-critical4');
           assert.deepStrictEqual(window.MatchCriticalWarnings.selectors, ['#newSessionBtn','#equipmentNewSessionBtn']);
           assert.strictEqual(listeners.size, 2, 'Deben quedar enlazadas las dos rutas de Nueva sesión');
           listeners.get('newSessionBtn')();
           listeners.get('equipmentNewSessionBtn')();
           assert.strictEqual(announced.length, 2);
-          assert(announced.every(item => /guardar o exportar el registro/.test(item.text)));
+          assert(announced.every(item => item.text === 'Precaución. Guarda el registro antes de iniciar otra sesión.'));
           assert(announced.every(item => item.options?.priority === 'critical'));
           console.log('MATCH_TTS_NEW_SESSION_ROUTES_OK', [...listeners.keys()].join(','));
           NODE
 
-      - name: Validate cache-busted loader and new-session warning
+      - name: Validate cache bust and closed phrase list
         shell: bash
         run: |
           set -euo pipefail
-          grep -F "const TTS_ASSET_VERSION = '20260831-critical3'" audit-fixes.js
-          grep -F 'audit-fixes.js?v=20260831-critical3' index.html
-          grep -F 'data-tts-policy-version="20260831-critical3"' index.html
-          grep -F 'tts-control.css?v=${TTS_ASSET_VERSION}' audit-fixes.js
+          grep -F "const TTS_ASSET_VERSION = '20260831-critical4'" audit-fixes.js
+          grep -F 'audit-fixes.js?v=20260831-critical4' index.html
+          grep -F 'data-tts-policy-version="20260831-critical4"' index.html
           grep -F 'tts-control.js?v=${TTS_ASSET_VERSION}' audit-fixes.js
           grep -F 'tts-critical-warnings.js?v=${TTS_ASSET_VERSION}' audit-fixes.js
-          grep -F 'data-tts-setting="criticalWarnings"' tts-control.js
-          grep -F 'Duplicado · códigos · no Match · nueva sesión' tts-control.js
+          grep -F "duplicate:'Precaución. Dispositivo duplicado.'" tts-control.js
+          grep -F "serial:'Error en código Serial. Host SN inválido.'" tts-control.js
+          grep -F "ua:'Error en código UA. UA inválido.'" tts-control.js
+          grep -F "match:'Los dispositivos hacen Match.'" tts-control.js
+          grep -F "newSession:'Precaución. Guarda el registro antes de iniciar otra sesión.'" tts-control.js
+          grep -F 'Duplicado · códigos · Match · nueva sesión' tts-control.js
           grep -F "'#newSessionBtn'" tts-critical-warnings.js
           grep -F "'#equipmentNewSessionBtn'" tts-critical-warnings.js
-          grep -F 'Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.' tts-critical-warnings.js
-          ! grep -F "DEFAULTS = Object.freeze({welcome:false, alerts:true})" tts-control.js
+          ! grep -F 'Duplicado · códigos · no Match · nueva sesión' tts-control.js

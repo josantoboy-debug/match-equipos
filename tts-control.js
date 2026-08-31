@@ -1,16 +1,26 @@
 (() => {
   'use strict';
 
-  const POLICY_VERSION = '20260831-critical3';
+  const POLICY_VERSION = '20260831-critical4';
   const STORAGE_PREFIX = 'matchEquipos.ttsPreference.v3';
   const OPERATOR_STORE_KEY = 'matchEquipos.operatorAccess.v1';
   const DEFAULTS = Object.freeze({welcome:false, criticalWarnings:true, alerts:false});
+  const FIXED_MESSAGES = Object.freeze({
+    duplicate:'Precaución. Dispositivo duplicado.',
+    serial:'Error en código Serial. Host SN inválido.',
+    ua:'Error en código UA. UA inválido.',
+    match:'Los dispositivos hacen Match.',
+    newSession:'Precaución. Guarda el registro antes de iniciar otra sesión.'
+  });
   const $ = selector => document.querySelector(selector);
 
   let currentOperator = null;
   let preference = {...DEFAULTS};
   let nativeSpeak = null;
   let speakWrapped = false;
+  let lastMatchCount = null;
+  let matchObserver = null;
+  const lastFixedAt = new Map();
 
   function safeJSON(value, fallback = null) {
     try { return JSON.parse(value); } catch { return fallback; }
@@ -62,27 +72,41 @@
     return /^\s*bienvenid[ao]\b/i.test(String(text || ''));
   }
 
-  function isCriticalWarning(text) {
+  function fixedAnnouncement(text) {
     const value = normalizeSpeechText(text);
-    if (!value) return false;
+    if (!value) return null;
 
-    // 1) Dispositivo / registro duplicado.
-    if (/duplicad|dispositivo repetid|ya existe/.test(value)) return true;
+    if (/guardar.*registro.*(nueva|otra) sesion|antes de.*(nueva|otra) sesion/.test(value)) {
+      return {key:'newSession', text:FIXED_MESSAGES.newSession};
+    }
 
-    // 2) Error en código UA o Serial / Host SN.
+    if (/duplicad|dispositivo repetid|registro repetid|ya esta registrado|ya existe/.test(value)) {
+      return {key:'duplicate', text:FIXED_MESSAGES.duplicate};
+    }
+
     const uaMention = /\bu\s*a\b|unit address/.test(value);
     const serialMention = /serial|host\s*s\s*n|host sn|\bs\s*n\b/.test(value);
-    const codeError = /invalid|incorrect|error|no valido|formato|debe iniciar|debe comenzar|debe tener|incomplet|longitud|fuera del formato/.test(value);
-    if (codeError && (uaMention || serialMention)) return true;
-    if (/host sn ya registrado con otro ua/.test(value)) return true;
+    const codeError = /invalid|incorrect|error|no valido|formato|debe iniciar|debe comenzar|debe tener|incomplet|longitud|fuera del formato|no cumple/.test(value);
+    if (codeError && serialMention) return {key:'serial', text:FIXED_MESSAGES.serial};
+    if (codeError && uaMention) return {key:'ua', text:FIXED_MESSAGES.ua};
 
-    // 3) No Match de dispositivos: discrepancia o contraparte aún no encontrada.
-    if (/no coincide|no se creo match|no se encontro todavia|no se encontro aun|match pendiente|revisar ua/.test(value)) return true;
-    if (/serial.*otra ua|ua.*otro serial|mismo host.*ua diferente/.test(value)) return true;
+    const negativeMatch = /no coincide|no se creo match|no se encontro|match pendiente|revisar/.test(value);
+    if (!negativeMatch && (/los dispositivos hacen match|match correcto|match ok|host\s*s\s*n.*u\s*a.*coinciden exactamente/.test(value))) {
+      return {key:'match', text:FIXED_MESSAGES.match};
+    }
 
-    // 4) Precaución antes de iniciar otra sesión.
-    if (/ya guardaste|asegurate de (guardar|exportar)|antes de .*nueva sesion|antes de .*otra sesion/.test(value)) return true;
+    return null;
+  }
 
+  function isCriticalWarning(text) {
+    return !!fixedAnnouncement(text);
+  }
+
+  function recentlySpokenFixed(key, windowMs = 1800) {
+    const now = Date.now();
+    const last = lastFixedAt.get(key) || 0;
+    if (now - last < windowMs) return true;
+    lastFixedAt.set(key, now);
     return false;
   }
 
@@ -100,16 +124,23 @@
 
     nativeSpeak = synth.speak.bind(synth);
     const wrappedSpeak = utterance => {
-      const text = String(utterance?.text || '');
-      const critical = isCriticalWarning(text);
-      const allowed = critical
+      const originalText = String(utterance?.text || '');
+      const fixed = fixedAnnouncement(originalText);
+      const allowed = fixed
         ? preference.criticalWarnings
-        : isWelcome(text)
+        : isWelcome(originalText)
           ? preference.welcome
           : preference.alerts;
       if (!allowed) {
         completeSuppressedUtterance(utterance);
         return;
+      }
+      if (fixed) {
+        if (recentlySpokenFixed(fixed.key)) {
+          completeSuppressedUtterance(utterance);
+          return;
+        }
+        try { utterance.text = fixed.text; } catch {}
       }
       return nativeSpeak(utterance);
     };
@@ -134,6 +165,43 @@
       core.setEnabled(true, {announceState:false});
       return true;
     } catch { return false; }
+  }
+
+  function announceMatchCreated() {
+    window.MatchVoiceTTS?.announce?.(FIXED_MESSAGES.match, {
+      priority:'high',
+      interrupt:true,
+      dedupeMs:800,
+      key:'fixed:match-created'
+    });
+  }
+
+  function checkMatchCount() {
+    const counter = $('#cMatches');
+    if (!counter) return false;
+    const current = Number(String(counter.textContent || '').trim()) || 0;
+    if (lastMatchCount === null) {
+      lastMatchCount = current;
+      return true;
+    }
+    if (current > lastMatchCount) announceMatchCreated();
+    lastMatchCount = current;
+    return true;
+  }
+
+  function installMatchWatcher() {
+    const counter = $('#cMatches');
+    if (!counter) return false;
+    if (counter.dataset.ttsMatchWatcherBound === '1') {
+      checkMatchCount();
+      return true;
+    }
+    counter.dataset.ttsMatchWatcherBound = '1';
+    checkMatchCount();
+    matchObserver?.disconnect?.();
+    matchObserver = new MutationObserver(checkMatchCount);
+    matchObserver.observe(counter, {childList:true, subtree:true, characterData:true});
+    return true;
   }
 
   function setOperator(operator) {
@@ -165,7 +233,7 @@
       if (state) state.textContent = active ? 'ON' : 'OFF';
     });
     const support = $('#operatorVoiceSupport');
-    if (support) support.textContent = 'speechSynthesis' in window ? 'Precauciones críticas por voz' : 'TTS no disponible';
+    if (support) support.textContent = 'speechSynthesis' in window ? 'Avisos clave por voz' : 'TTS no disponible';
     document.documentElement.dataset.ttsPolicyVersion = POLICY_VERSION;
   }
 
@@ -182,7 +250,7 @@
         <div class="operator-voice-head"><span>VOZ TTS</span><small id="operatorVoiceSupport"></small></div>
         <div class="operator-voice-options">
           <button type="button" data-tts-setting="criticalWarnings" aria-pressed="true">
-            <span class="voice-icon" aria-hidden="true">⚠️</span><span><strong>Precauciones</strong><small>Duplicado · códigos · no Match · nueva sesión</small></span><b data-tts-state>ON</b>
+            <span class="voice-icon" aria-hidden="true">⚠️</span><span><strong>Avisos clave</strong><small>Duplicado · códigos · Match · nueva sesión</small></span><b data-tts-state>ON</b>
           </button>
           <button type="button" data-tts-setting="welcome" aria-pressed="false">
             <span class="voice-icon" aria-hidden="true">👋</span><span><strong>Bienvenida</strong><small>Al iniciar sesión</small></span><b data-tts-state>OFF</b>
@@ -218,35 +286,37 @@
     setOperator({id:detail.id, name:detail.name});
     installSpeechPolicy();
     ensureCoreAlertsEnabled();
+    installMatchWatcher();
   });
 
   preference = readPreference(null);
   installSpeechPolicy();
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      watchLogin();
-      setTimeout(() => {
-        installSpeechPolicy();
-        ensureCoreAlertsEnabled();
-      }, 0);
-    });
-  } else {
+  function bootPolicy() {
     watchLogin();
+    installMatchWatcher();
     setTimeout(() => {
       installSpeechPolicy();
       ensureCoreAlertsEnabled();
+      installMatchWatcher();
     }, 0);
   }
 
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootPolicy, {once:true});
+  else bootPolicy();
+
   window.AppTTS = {
     version: POLICY_VERSION,
+    fixedMessages: {...FIXED_MESSAGES},
     getPreference: () => ({...preference}),
+    classifyAnnouncement: text => fixedAnnouncement(text)?.key || null,
+    fixedAnnouncement: text => fixedAnnouncement(text)?.text || null,
     isCriticalWarning,
     setWelcome: enabled => savePreference({welcome:!!enabled}),
     setCriticalWarnings: enabled => savePreference({criticalWarnings:!!enabled}),
     setAlerts: enabled => savePreference({alerts:!!enabled}),
     setOperator,
+    installMatchWatcher,
     policyInstalled: () => speakWrapped
   };
 })();
