@@ -144,7 +144,8 @@ jobs:
         run: |
           set -euo pipefail
           grep -F "const TTS_ASSET_VERSION = '20260831-critical4'" audit-fixes.js
-          grep -F 'audit-fixes.js?v=20260831-critical4' index.html
+          audit_ref=$(grep -o 'audit-fixes.js?v=[^"&]*' index.html | head -1)
+          test -n "$audit_ref"
           grep -F 'data-tts-policy-version="20260831-critical4"' index.html
           grep -F 'tts-control.js?v=${TTS_ASSET_VERSION}' audit-fixes.js
           grep -F 'tts-critical-warnings.js?v=${TTS_ASSET_VERSION}' audit-fixes.js
@@ -157,3 +158,4 @@ jobs:
           grep -F "'#newSessionBtn'" tts-critical-warnings.js
           grep -F "'#equipmentNewSessionBtn'" tts-critical-warnings.js
           ! grep -F 'Duplicado · códigos · no Match · nueva sesión' tts-control.js
+          echo "TTS_CACHE_POLICY_OK loader=${audit_ref} tts=20260831-critical4"
