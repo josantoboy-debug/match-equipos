@@ -33,6 +33,7 @@ jobs:
           let spoken = [];
           global.Event = class Event { constructor(type){ this.type=type; } };
           global.MutationObserver = class { observe(){} disconnect(){} };
+          global.localStorage = {getItem(){return null;},setItem(){}};
           global.document = {
             readyState:'loading',
             querySelector(){ return null; },
