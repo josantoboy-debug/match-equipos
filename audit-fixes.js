@@ -4,7 +4,7 @@
   const $ = selector => document.querySelector(selector);
   const MAX_PER_BOX = 64;
   const THEME_ASSET_VERSION = '20260831-light2';
-  const TTS_ASSET_VERSION = '20260831-critical1';
+  const TTS_ASSET_VERSION = '20260831-critical2';
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
