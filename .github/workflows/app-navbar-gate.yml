@@ -3,7 +3,7 @@ name: App navbar gate
 on:
   push:
     branches:
-      - fix/app-navbar-20260831
+      - fix/app-navbar-20260831-r2
     paths:
       - 'index.html'
       - '.github/workflows/app-navbar-gate.yml'
