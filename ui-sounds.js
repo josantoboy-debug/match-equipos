@@ -78,16 +78,63 @@
     return playPattern('registered');
   }
 
+  function registrationSnapshot() {
+    let matchRecords = null;
+    let boxRecords = null;
+    try {
+      const state = window.MatchEquiposCore?.getState?.();
+      if (state && Array.isArray(state.records)) matchRecords = state.records.length;
+    } catch {}
+    try {
+      const rows = window.EquipmentRegistry?.getRows?.();
+      if (Array.isArray(rows)) boxRecords = rows.length;
+    } catch {}
+    return {matchRecords, boxRecords};
+  }
+
+  function registrationIncreased(before, after) {
+    return (
+      (Number.isInteger(before.matchRecords) && Number.isInteger(after.matchRecords) && after.matchRecords > before.matchRecords) ||
+      (Number.isInteger(before.boxRecords) && Number.isInteger(after.boxRecords) && after.boxRecords > before.boxRecords)
+    );
+  }
+
+  function verifyInteractiveRegistration(before) {
+    setTimeout(() => {
+      const after = registrationSnapshot();
+      if (registrationIncreased(before, after)) void playRegistered();
+    }, 0);
+  }
+
+  function isInteractiveRegistrationTarget(target, eventType) {
+    const id = target?.id || '';
+    if (eventType === 'click') return id === 'registerBtn' || id === 'equipmentAddBtn';
+    return id === 'uaInput' || id === 'equipmentUA' || id === 'equipmentBox';
+  }
+
   const prime = () => { void primeAudio(); };
   document.addEventListener('pointerdown', prime, {passive: true});
   document.addEventListener('keydown', prime, {passive: true});
   document.addEventListener('touchstart', prime, {passive: true});
+
+  document.addEventListener('click', event => {
+    const target = event.target?.closest?.('#registerBtn, #equipmentAddBtn');
+    if (!target || !isInteractiveRegistrationTarget(target, 'click')) return;
+    verifyInteractiveRegistration(registrationSnapshot());
+  }, true);
+
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.isComposing || !isInteractiveRegistrationTarget(event.target, 'keydown')) return;
+    verifyInteractiveRegistration(registrationSnapshot());
+  }, true);
 
   window.MatchUISounds = {
     version: UI_SOUND_VERSION,
     playFound,
     playRegistered,
     primeAudio,
+    registrationSnapshot,
+    registrationIncreased,
     isSupported: () => Boolean(AudioContextCtor)
   };
 })();
