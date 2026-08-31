@@ -57,9 +57,11 @@ jobs:
             code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?verify=${nonce}" || true)
             [ "$code" = "200" ] || return 1
             grep -F "data-build=\"${EXPECTED_BUILD}\"" /tmp/live.html >/dev/null || return 1
+            grep -F "data-tts-policy-version=\"${EXPECTED_TTS_VERSION}\"" /tmp/live.html >/dev/null || return 1
             grep -F "match-data-contract.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null || return 1
             grep -F "app.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null || return 1
             grep -F "theme-control.css?v=${EXPECTED_THEME}" /tmp/live.html >/dev/null || return 1
+            grep -F "audit-fixes.js?v=${EXPECTED_TTS_VERSION}" /tmp/live.html >/dev/null || return 1
 
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}match-data-contract.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/contract.js || return 1
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js || return 1
@@ -84,7 +86,7 @@ jobs:
             grep -F "api('reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
             grep -F "api('emergency_reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
 
-            audit_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/audit.js -w '%{http_code}' "${PUBLIC_URL}audit-fixes.js?verify=${nonce}" || true)
+            audit_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/audit.js -w '%{http_code}' "${PUBLIC_URL}audit-fixes.js?v=${EXPECTED_TTS_VERSION}&verify=${nonce}" || true)
             [ "$audit_code" = "200" ] || return 1
             grep -F "TTS_ASSET_VERSION = '${EXPECTED_TTS_VERSION}'" /tmp/audit.js >/dev/null || return 1
             grep -F 'tts-control.js?v=${TTS_ASSET_VERSION}' /tmp/audit.js >/dev/null || return 1
@@ -94,12 +96,15 @@ jobs:
             [ "$tts_code" = "200" ] || return 1
             grep -F "POLICY_VERSION = '${EXPECTED_TTS_VERSION}'" /tmp/tts.js >/dev/null || return 1
             grep -F 'criticalWarnings:true, alerts:false' /tmp/tts.js >/dev/null || return 1
-            grep -F 'no se encontro todavia' /tmp/tts.js >/dev/null || return 1
-            grep -F 'ya guardaste' /tmp/tts.js >/dev/null || return 1
+            grep -F "duplicate:'Precaución. Dispositivo duplicado.'" /tmp/tts.js >/dev/null || return 1
+            grep -F "serial:'Error en código Serial. Host SN inválido.'" /tmp/tts.js >/dev/null || return 1
+            grep -F "ua:'Error en código UA. UA inválido.'" /tmp/tts.js >/dev/null || return 1
+            grep -F "match:'Los dispositivos hacen Match.'" /tmp/tts.js >/dev/null || return 1
+            grep -F "newSession:'Precaución. Guarda el registro antes de iniciar otra sesión.'" /tmp/tts.js >/dev/null || return 1
 
             critical_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/critical.js -w '%{http_code}' "${PUBLIC_URL}tts-critical-warnings.js?v=${EXPECTED_TTS_VERSION}&verify=${nonce}" || true)
             [ "$critical_code" = "200" ] || return 1
-            grep -F 'Asegúrate de guardar o exportar el registro antes de iniciar otra sesión.' /tmp/critical.js >/dev/null || return 1
+            grep -F 'Precaución. Guarda el registro antes de iniciar otra sesión.' /tmp/critical.js >/dev/null || return 1
 
             echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=${code} build=${EXPECTED_BUILD} theme=${EXPECTED_THEME} admin=${EXPECTED_ADMIN_VERSION} tts=${EXPECTED_TTS_VERSION}"
             return 0
