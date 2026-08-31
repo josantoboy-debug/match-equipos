@@ -39,6 +39,9 @@ jobs:
           app_line=$(grep -n 'app.js?v=20260831-matchlocation1' index.html | head -1 | cut -d: -f1)
           test "$contract_line" -lt "$app_line"
           for ref in $(grep -Eo '(src|href)="[^"?#]+\.(js|css)' index.html | sed -E 's/^(src|href)="//'); do
+            case "$ref" in
+              http://*|https://*|//*) continue ;;
+            esac
             test -f "$ref" || { echo "Missing referenced asset: $ref"; exit 1; }
           done
 
