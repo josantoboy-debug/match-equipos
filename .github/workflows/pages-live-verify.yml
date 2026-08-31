@@ -58,7 +58,7 @@ jobs:
 
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}match-data-contract.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/contract.js || return 1
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js || return 1
-            grep -F 'window.MatchDataContract' /tmp/contract.js >/dev/null || return 1
+            grep -F 'root.MatchDataContract=api' /tmp/contract.js >/dev/null || return 1
             grep -F 'const Contract = window.MatchDataContract;' /tmp/app.js >/dev/null || return 1
             grep -F 'findCounterpart' /tmp/app.js >/dev/null || return 1
             grep -F 'carcasa.host!==equipo.host || carcasa.uaNorm!==equipo.uaNorm' /tmp/app.js >/dev/null || return 1
