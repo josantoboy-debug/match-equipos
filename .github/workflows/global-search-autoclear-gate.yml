@@ -1,0 +1,191 @@
+name: Global search autoclear gate
+
+on:
+  push:
+    branches:
+      - repair/global-search-autoclear-20260831
+    paths:
+      - 'search-mode.js'
+      - 'index.html'
+      - '.github/workflows/global-search-autoclear-gate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'search-mode.js'
+      - 'index.html'
+      - '.github/workflows/global-search-autoclear-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  global-search-autoclear:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax references and cache marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check search-mode.js
+          grep -F "SEARCH_MODE_VERSION = '20260831-autoclear1'" search-mode.js
+          grep -F 'data-global-search-version="20260831-autoclear1"' index.html
+          grep -F '<meta name="global-search-version" content="20260831-autoclear1">' index.html
+          grep -F 'search-mode.js?v=20260831-autoclear1' index.html
+          grep -F 'prepareForNextSearch' search-mode.js
+          grep -F 'isCompleteAutomaticQuery' search-mode.js
+          if grep -Eq 'document\.write|MutationObserver' search-mode.js; then
+            echo 'Unexpected fragile DOM control in global search module'
+            exit 1
+          fi
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Create isolated browser harness
+        shell: bash
+        run: |
+          cat > global-search-harness.tmp.html <<'HTML'
+          <!doctype html>
+          <html lang="es">
+          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+          <body>
+            <button id="searchModeAuto" class="active" type="button">Automático</button>
+            <button id="searchModeManual" type="button">Manual</button>
+            <input id="searchInput" autocomplete="off">
+            <button id="searchRunBtn" type="button" hidden>Buscar</button>
+            <div id="searchModeHelp"></div>
+            <div id="searchResults"><div>Sin búsqueda activa.</div></div>
+            <script>
+              const searchInput=document.querySelector('#searchInput');
+              const searchResults=document.querySelector('#searchResults');
+              searchInput.oninput=()=>{searchResults.innerHTML='<div>CORE:'+searchInput.value+'</div>';};
+              window.FileIndexSearch={appendResults(query,node){node.insertAdjacentHTML('beforeend','<div>FILE:'+query+'</div>');}};
+              window.EquipmentRegistry={appendSearchResults(query,node){node.insertAdjacentHTML('beforeend','<div>BOX:'+query+'</div>');}};
+            </script>
+            <script src="search-mode.js?v=20260831-autoclear1"></script>
+          </body>
+          </html>
+          HTML
+
+      - name: Start local application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4178 --bind 127.0.0.1 > /tmp/global-search-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4178/global-search-harness.tmp.html >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/global-search-http.log
+          exit 1
+
+      - name: Desktop tablet mobile automatic search cycle
+        shell: bash
+        run: |
+          cat > /tmp/global-search-smoke.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const viewports=[
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+          const HOST='M91616EQ4607';
+          const UA='0000000000000022';
+
+          (async()=>{
+            const browser=await puppeteer.launch({
+              headless:true,
+              executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',
+              args:['--no-sandbox','--disable-setuid-sandbox']
+            });
+
+            for(const viewport of viewports){
+              const page=await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const pageErrors=[];
+              const consoleErrors=[];
+              page.on('pageerror',error=>pageErrors.push(String(error)));
+              page.on('console',msg=>{if(msg.type()==='error')consoleErrors.push(msg.text());});
+
+              await page.goto(`http://127.0.0.1:4178/global-search-harness.tmp.html?viewport=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(()=>window.MatchSearchModes?.version==='20260831-autoclear1',{timeout:5000});
+
+              let state=await page.evaluate(()=>({
+                automatic:document.querySelector('#searchModeAuto').classList.contains('active'),
+                runHidden:document.querySelector('#searchRunBtn').hidden,
+                focused:document.activeElement?.id,
+                overflow:document.documentElement.scrollWidth>innerWidth
+              }));
+              assert.deepStrictEqual(state,{automatic:true,runHidden:true,focused:'searchInput',overflow:false});
+
+              await page.type('#searchInput',HOST);
+              await page.waitForFunction(()=>document.querySelector('#searchInput').value==='');
+              state=await page.evaluate(()=>({value:searchInput.value,focused:document.activeElement?.id,text:searchResults.textContent}));
+              assert.strictEqual(state.value,'');
+              assert.strictEqual(state.focused,'searchInput');
+              assert(state.text.includes(`CORE:${HOST}`));
+              assert(state.text.includes(`FILE:${HOST}`));
+              assert(state.text.includes(`BOX:${HOST}`));
+
+              const preservedAfterHost=state.text;
+              await page.keyboard.press('Enter');
+              state=await page.evaluate(()=>({value:searchInput.value,text:searchResults.textContent,focused:document.activeElement?.id}));
+              assert.strictEqual(state.value,'');
+              assert.strictEqual(state.text,preservedAfterHost);
+              assert.strictEqual(state.focused,'searchInput');
+
+              await page.type('#searchInput',UA);
+              await page.waitForFunction(()=>document.querySelector('#searchInput').value==='');
+              state=await page.evaluate(()=>({value:searchInput.value,focused:document.activeElement?.id,text:searchResults.textContent}));
+              assert.strictEqual(state.focused,'searchInput');
+              assert(state.text.includes(`CORE:${UA}`));
+              assert(state.text.includes(`FILE:${UA}`));
+              assert(state.text.includes(`BOX:${UA}`));
+
+              const FREE='CAJA-TEST';
+              await page.type('#searchInput',FREE);
+              state=await page.evaluate(()=>({value:searchInput.value,text:searchResults.textContent}));
+              assert.strictEqual(state.value,FREE);
+              assert(state.text.includes(`CORE:${FREE}`));
+              await page.keyboard.press('Enter');
+              await page.waitForFunction(()=>document.querySelector('#searchInput').value==='');
+              state=await page.evaluate(()=>({value:searchInput.value,focused:document.activeElement?.id,text:searchResults.textContent}));
+              assert.strictEqual(state.focused,'searchInput');
+              assert(state.text.includes(`CORE:${FREE}`));
+
+              await page.click('#searchModeManual');
+              await page.type('#searchInput',HOST);
+              state=await page.evaluate(()=>({value:searchInput.value,text:searchResults.textContent,runHidden:document.querySelector('#searchRunBtn').hidden}));
+              assert.strictEqual(state.value,HOST);
+              assert.strictEqual(state.runHidden,false);
+              assert(state.text.includes('Pulsa'));
+              await page.click('#searchRunBtn');
+              state=await page.evaluate(()=>({value:searchInput.value,text:searchResults.textContent}));
+              assert.strictEqual(state.value,HOST);
+              assert(state.text.includes(`CORE:${HOST}`));
+
+              const responsive=await Promise.race([
+                page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('ok'),100))),
+                new Promise((_,reject)=>setTimeout(()=>reject(new Error('Browser event loop blocked')),2000))
+              ]);
+              assert.strictEqual(responsive,'ok');
+              assert.deepStrictEqual(pageErrors,[]);
+              assert.deepStrictEqual(consoleErrors,[]);
+              await page.close();
+            }
+
+            await browser.close();
+            console.log('GLOBAL_SEARCH_AUTOCLEAR_GATE_OK');
+          })().catch(error=>{console.error(error);process.exit(1);});
+          NODE
+          node /tmp/global-search-smoke.cjs
+
+      - name: Remove runner-only harness
+        if: always()
+        run: rm -f global-search-harness.tmp.html
