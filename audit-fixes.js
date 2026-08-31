@@ -47,6 +47,20 @@
     document.head.appendChild(script);
   }
 
+  function loadCriticalWarnings() {
+    if (window.MatchCriticalWarnings || document.querySelector('script[data-critical-tts]')) {
+      window.MatchCriticalWarnings?.bind?.();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = `tts-critical-warnings.js?v=${TTS_ASSET_VERSION}`;
+    script.dataset.criticalTts = '1';
+    script.async = false;
+    script.onload = () => window.MatchCriticalWarnings?.bind?.();
+    script.onerror = () => console.error('[match-equipos] No se pudo cargar tts-critical-warnings.js');
+    document.body.appendChild(script);
+  }
+
   function restoreNativeAnchorClick() {
     try {
       if (typeof HTMLElement !== 'undefined' && typeof HTMLElement.prototype.click === 'function') {
@@ -111,7 +125,10 @@
     script.src = 'equipment-new-session.js?v=ccf3874';
     script.dataset.equipmentNewSession = '1';
     script.async = false;
-    script.onload = () => window.EquipmentNewSession?.install?.();
+    script.onload = () => {
+      window.EquipmentNewSession?.install?.();
+      loadCriticalWarnings();
+    };
     script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-new-session.js');
     document.body.appendChild(script);
   }
@@ -165,6 +182,7 @@
     guardQuantity();
     loadExportSummary();
     loadEquipmentNewSession();
+    loadCriticalWarnings();
     loadEquipmentProcessHistory();
     loadEquipmentImportContext();
     setTimeout(healthCheck, 0);
@@ -177,6 +195,7 @@
     guardQuantity();
     loadExportSummary();
     loadEquipmentNewSession();
+    loadCriticalWarnings();
     loadEquipmentProcessHistory();
     loadEquipmentImportContext();
     setTimeout(healthCheck, 0);
@@ -187,6 +206,7 @@
     healthCheck,
     loadThemeControl,
     loadTTSControl,
+    loadCriticalWarnings,
     loadExportSummary,
     loadEquipmentNewSession,
     loadEquipmentProcessHistory,
