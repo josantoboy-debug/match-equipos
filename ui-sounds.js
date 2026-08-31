@@ -4,7 +4,7 @@
   const UI_SOUND_VERSION = '20260831-sound1';
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   let audioContext = null;
-  const lastPlayedAt = {found: 0, registered: 0};
+  const lastPlayedAt = {found: Number.NEGATIVE_INFINITY, registered: Number.NEGATIVE_INFINITY};
   const minimumGapMs = {found: 180, registered: 220};
 
   function getAudioContext() {
