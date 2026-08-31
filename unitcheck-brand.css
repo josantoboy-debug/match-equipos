@@ -8,12 +8,10 @@
   display:flex;
   align-items:center;
   min-width:0;
-  flex:0 1 390px;
+  flex:0 1 235px;
 }
 .unitcheck-brand-stack{
-  display:flex;
-  align-items:center;
-  gap:10px;
+  display:block;
   min-width:0;
 }
 .unitcheck-logo-frame{
@@ -22,7 +20,6 @@
   justify-content:flex-start;
   width:clamp(190px,14vw,220px);
   max-width:100%;
-  flex:0 0 auto;
   padding:2px 4px;
   overflow:hidden;
   border:1px solid rgba(148,163,184,.30);
@@ -38,45 +35,26 @@
   object-fit:contain;
   object-position:left center;
 }
-.unitcheck-subtitle{
-  display:block!important;
-  margin:0!important;
-  max-width:145px;
-  overflow:hidden;
-  color:var(--muted,#94a3b8);
-  font-size:10px!important;
-  font-weight:600;
-  line-height:1.35;
-  letter-spacing:.01em;
-  text-overflow:ellipsis;
-  white-space:normal;
-}
+.unitcheck-subtitle{display:none!important}
 html[data-theme="light"] .unitcheck-logo-frame{
   border-color:#d7e0e9;
   box-shadow:0 2px 8px rgba(15,23,42,.07);
 }
-html[data-theme="light"] .unitcheck-subtitle{color:var(--text-muted-aa,#5f6f82)!important}
-
 @media(max-width:1180px){
-  .unitcheck-brand{flex:1 1 340px}
+  .unitcheck-brand{flex:1 1 225px}
   .unitcheck-logo-frame{width:205px}
-  .unitcheck-subtitle{max-width:135px}
 }
 @media(max-width:900px){
   .unitcheck-logo-frame{width:195px}
-  .unitcheck-subtitle{display:block!important;max-width:125px;font-size:9.5px!important}
 }
 @media(max-width:620px){
   .topbar{align-items:flex-start!important;padding-top:9px;padding-bottom:9px}
   .unitcheck-brand{flex:1 1 100%;width:100%;max-width:100%}
-  .unitcheck-brand-stack{display:grid;gap:2px}
   .unitcheck-logo-frame{width:min(205px,64vw);border-radius:8px;padding:2px 4px}
-  .unitcheck-subtitle{max-width:100%;font-size:9px!important;line-height:1.25;white-space:nowrap}
   .topbar .top-actions{width:100%;max-width:100%;justify-content:flex-end;overflow:visible;flex-wrap:wrap}
 }
 @media(max-width:420px){
   .unitcheck-logo-frame{width:min(195px,70vw)}
-  .unitcheck-subtitle{font-size:8.5px!important}
 }
 @media print{
   .unitcheck-logo-frame{box-shadow:none;border-color:#d1d5db}
