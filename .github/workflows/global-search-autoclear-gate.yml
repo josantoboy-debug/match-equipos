@@ -50,7 +50,11 @@ jobs:
           cat > global-search-harness.tmp.html <<'HTML'
           <!doctype html>
           <html lang="es">
-          <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <link rel="icon" href="data:,">
+          </head>
           <body>
             <button id="searchModeAuto" class="active" type="button">Automático</button>
             <button id="searchModeManual" type="button">Manual</button>
