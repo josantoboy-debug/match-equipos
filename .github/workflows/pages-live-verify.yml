@@ -2,7 +2,7 @@ name: Live Pages verification
 
 on:
   push:
-    branches: [main]
+    branches: [main, verify-admin-page-live]
   workflow_dispatch:
 
 permissions:
@@ -43,7 +43,16 @@ jobs:
               curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js
               grep -F 'MatchDataContract' /tmp/contract.js >/dev/null
               grep -F 'MatchEquiposCore' /tmp/app.js >/dev/null
-              echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=200 build=${EXPECTED_BUILD}"
+
+              admin_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/admin-reset.html -w '%{http_code}' "${PUBLIC_URL}admin-reset-pin.html?v=20260831-1&verify=${nonce}" || true)
+              test "$admin_code" = "200"
+              grep -F 'Administración de PIN' /tmp/admin-reset.html >/dev/null
+              grep -F 'admin-reset-pin.js?v=20260831-1' /tmp/admin-reset.html >/dev/null
+              curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}admin-reset-pin.js?v=20260831-1&verify=${nonce}" -o /tmp/admin-reset.js
+              grep -F 'core_admin_reset_pin_service' /tmp/admin-reset.js >/dev/null
+              grep -F 'core_operator_login_service' /tmp/admin-reset.js >/dev/null
+
+              echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=200 build=${EXPECTED_BUILD} admin_http=${admin_code} admin_version=20260831-1"
               ok=1
               break
             fi
