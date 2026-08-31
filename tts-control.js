@@ -1,9 +1,10 @@
 (() => {
   'use strict';
 
-  const STORAGE_PREFIX = 'matchEquipos.ttsPreference.v2';
+  const POLICY_VERSION = '20260831-critical1';
+  const STORAGE_PREFIX = 'matchEquipos.ttsPreference.v3';
   const OPERATOR_STORE_KEY = 'matchEquipos.operatorAccess.v1';
-  const DEFAULTS = Object.freeze({welcome:false, alerts:true});
+  const DEFAULTS = Object.freeze({welcome:false, criticalWarnings:true, alerts:false});
   const $ = selector => document.querySelector(selector);
 
   let currentOperator = null;
@@ -37,6 +38,7 @@
     const saved = safeJSON(localStorage.getItem(storageKey(operator)), null);
     return {
       welcome: typeof saved?.welcome === 'boolean' ? saved.welcome : DEFAULTS.welcome,
+      criticalWarnings: typeof saved?.criticalWarnings === 'boolean' ? saved.criticalWarnings : DEFAULTS.criticalWarnings,
       alerts: typeof saved?.alerts === 'boolean' ? saved.alerts : DEFAULTS.alerts
     };
   }
@@ -45,13 +47,31 @@
     preference = {...preference, ...next};
     try { localStorage.setItem(storageKey(), JSON.stringify(preference)); } catch {}
     syncControls();
-    if (!preference.alerts) {
+    if (!preference.welcome && !preference.criticalWarnings && !preference.alerts) {
       try { window.speechSynthesis?.cancel?.(); } catch {}
     }
   }
 
+  function normalizeSpeechText(value) {
+    return String(value || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
   function isWelcome(text) {
     return /^\s*bienvenid[ao]\b/i.test(String(text || ''));
+  }
+
+  function isCriticalWarning(text) {
+    const value = normalizeSpeechText(text);
+    if (!value) return false;
+    if (/duplicad|dispositivo repetid|ya existe/.test(value)) return true;
+
+    const uaMention = /\bu\s*a\b|unit address/.test(value);
+    const serialMention = /serial|host\s*s\s*n|host sn|\bs\s*n\b/.test(value);
+    const errorSignal = /invalid|incorrect|error|no coincide|no valido|formato|debe iniciar|debe comenzar|incomplet|longitud/.test(value);
+
+    return errorSignal && (uaMention || serialMention);
   }
 
   function completeSuppressedUtterance(utterance) {
@@ -69,7 +89,12 @@
     nativeSpeak = synth.speak.bind(synth);
     const wrappedSpeak = utterance => {
       const text = String(utterance?.text || '');
-      const allowed = isWelcome(text) ? preference.welcome : preference.alerts;
+      const critical = isCriticalWarning(text);
+      const allowed = critical
+        ? preference.criticalWarnings
+        : isWelcome(text)
+          ? preference.welcome
+          : preference.alerts;
       if (!allowed) {
         completeSuppressedUtterance(utterance);
         return;
@@ -84,7 +109,7 @@
       }
       speakWrapped = synth.speak === wrappedSpeak;
     } catch (error) {
-      console.warn('[tts-policy] No se pudo separar bienvenida y alertas', error);
+      console.warn('[tts-policy] No se pudo instalar la política selectiva de voz', error);
       speakWrapped = false;
     }
     return speakWrapped;
@@ -129,16 +154,7 @@
     });
     const support = $('#operatorVoiceSupport');
     if (support) support.textContent = 'speechSynthesis' in window ? 'Voz del navegador' : 'TTS no disponible';
-  }
-
-  function announceAlertsEnabled() {
-    if (!preference.alerts) return;
-    ensureCoreAlertsEnabled();
-    setTimeout(() => {
-      window.MatchVoiceTTS?.announce?.('Alertas de voz activadas.', {
-        priority:'high', interrupt:true, dedupeMs:0, key:`tts-alerts-on-${Date.now()}`
-      });
-    }, 0);
+    document.documentElement.dataset.ttsPolicyVersion = POLICY_VERSION;
   }
 
   function installLoginControls() {
@@ -153,11 +169,14 @@
       section.innerHTML = `
         <div class="operator-voice-head"><span>VOZ TTS</span><small id="operatorVoiceSupport"></small></div>
         <div class="operator-voice-options">
+          <button type="button" data-tts-setting="criticalWarnings" aria-pressed="true">
+            <span class="voice-icon" aria-hidden="true">⚠️</span><span><strong>Precauciones</strong><small>Duplicado · UA · Serial</small></span><b data-tts-state>ON</b>
+          </button>
           <button type="button" data-tts-setting="welcome" aria-pressed="false">
             <span class="voice-icon" aria-hidden="true">👋</span><span><strong>Bienvenida</strong><small>Al iniciar sesión</small></span><b data-tts-state>OFF</b>
           </button>
-          <button type="button" data-tts-setting="alerts" aria-pressed="true">
-            <span class="voice-icon" aria-hidden="true">🔊</span><span><strong>Alertas</strong><small>Errores y procesos</small></span><b data-tts-state>ON</b>
+          <button type="button" data-tts-setting="alerts" aria-pressed="false">
+            <span class="voice-icon" aria-hidden="true">🔊</span><span><strong>Otros avisos</strong><small>Procesos y confirmaciones</small></span><b data-tts-state>OFF</b>
           </button>
         </div>`;
       body.insertBefore(section, note);
@@ -165,9 +184,7 @@
         const button = event.target.closest('[data-tts-setting]');
         if (!button) return;
         const setting = button.dataset.ttsSetting;
-        const next = !preference[setting];
-        savePreference({[setting]:next});
-        if (setting === 'alerts' && next) announceAlertsEnabled();
+        savePreference({[setting]:!preference[setting]});
       });
     }
 
@@ -211,12 +228,12 @@
   }
 
   window.AppTTS = {
+    version: POLICY_VERSION,
     getPreference: () => ({...preference}),
+    isCriticalWarning,
     setWelcome: enabled => savePreference({welcome:!!enabled}),
-    setAlerts: enabled => {
-      savePreference({alerts:!!enabled});
-      if (enabled) announceAlertsEnabled();
-    },
+    setCriticalWarnings: enabled => savePreference({criticalWarnings:!!enabled}),
+    setAlerts: enabled => savePreference({alerts:!!enabled}),
     setOperator,
     policyInstalled: () => speakWrapped
   };
