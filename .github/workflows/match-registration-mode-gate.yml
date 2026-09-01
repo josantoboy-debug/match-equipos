@@ -40,7 +40,7 @@ jobs:
           grep -F "MATCH_REGISTRATION_MODE_VERSION = '20260901-matchregmode1'" app.js
           grep -F "captureMode: 'manual'" app.js
           grep -F "getCaptureMode:()=>state.captureMode" app.js
-          grep -F "if(state.captureMode==='automatic')manualRegister();else $('#registerBtn').focus();" app.js
+          grep -F "if(state.captureMode==='automatic')manualRegister();else \$('#registerBtn').focus();" app.js
           grep -F "return state.captureMode==='automatic'?'Captura automática':'Captura manual';" app.js
           ! grep -F '<script src="app.js?v=20260831-matchlocation1"></script>' index.html
           ! grep -Eq 'document\.write|MutationObserver' app.js
