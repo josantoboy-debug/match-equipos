@@ -1,63 +1,59 @@
-/* UNITCHECK header branding
- * Brand version: 20260831-unitcheck1
- * Visual-only: replaces the old M badge with the UNITCHECK graphic mark and title.
+/* UNITCHECK suite branding
+ * Brand version: 20260831-suitebrand1
+ * Shared naming: UNITCHECK · Match / UNITCHECK · Generador.
  */
 .topbar{padding-top:8px;padding-bottom:8px}
 .unitcheck-brand{
   display:flex;
   align-items:center;
-  min-width:0;
-  flex:0 1 250px;
-}
-.unitcheck-brand-stack{
-  display:flex;
-  align-items:center;
   gap:10px;
   min-width:0;
+  flex:0 1 300px;
 }
-.unitcheck-logo-frame{
+.unitcheck-mark{
+  display:block;
   width:42px;
   height:42px;
   flex:0 0 42px;
-  overflow:hidden;
-  border:1px solid rgba(148,163,184,.30);
-  border-radius:10px;
-  background:#fff;
-  box-shadow:0 2px 8px rgba(2,6,23,.10);
-}
-.unitcheck-logo{
-  display:block;
-  width:auto;
-  max-width:none;
-  height:42px;
   object-fit:contain;
-  object-position:left center;
 }
-.unitcheck-subtitle{display:none!important}
-.unitcheck-brand-stack::after{
-  content:"UNITCHECK";
-  display:block;
-  color:var(--text,#edf3fb);
-  font-size:17px;
-  font-weight:850;
+.unitcheck-brand-title{
+  display:flex;
+  align-items:baseline;
+  gap:5px;
+  min-width:0;
   line-height:1;
-  letter-spacing:.01em;
   white-space:nowrap;
+  color:var(--text,#edf3fb);
 }
-html[data-theme="light"] .unitcheck-logo-frame{
-  border-color:#d7e0e9;
-  box-shadow:0 2px 7px rgba(15,23,42,.07);
+.unitcheck-brand-title strong{
+  font-size:17px;
+  font-weight:900;
+  letter-spacing:.015em;
 }
-html[data-theme="light"] .unitcheck-brand-stack::after{color:var(--text,#172033)}
+.unitcheck-brand-separator{
+  color:var(--text-secondary,#94a3b8);
+  font-size:15px;
+  font-weight:800;
+}
+.unitcheck-brand-module{
+  color:var(--text-secondary,#b9c6d6);
+  font-size:15px;
+  font-weight:800;
+}
+html[data-theme="light"] .unitcheck-brand-title{color:var(--text,#172033)}
+html[data-theme="light"] .unitcheck-brand-module,
+html[data-theme="light"] .unitcheck-brand-separator{color:var(--text-secondary,#475569)}
 @media(max-width:1180px){
-  .unitcheck-brand{flex:1 1 250px}
+  .unitcheck-brand{flex:1 1 260px}
 }
 @media(max-width:620px){
-  .unitcheck-logo-frame{width:38px;height:38px;flex-basis:38px;border-radius:9px}
-  .unitcheck-logo{height:38px}
-  .unitcheck-brand-stack{gap:8px}
-  .unitcheck-brand-stack::after{font-size:15px}
+  .unitcheck-brand{gap:8px}
+  .unitcheck-mark{width:38px;height:38px;flex-basis:38px}
+  .unitcheck-brand-title{gap:4px}
+  .unitcheck-brand-title strong{font-size:15px}
+  .unitcheck-brand-separator,.unitcheck-brand-module{font-size:13px}
 }
 @media print{
-  .unitcheck-logo-frame{box-shadow:none;border-color:#d1d5db}
+  .unitcheck-mark{filter:none}
 }
