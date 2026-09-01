@@ -2,7 +2,6 @@
   'use strict';
 
   const $ = selector => document.querySelector(selector);
-  const MAX_PER_BOX = 64;
   const norm = value => String(value ?? '').trim().replace(/\s+/g, ' ');
   const upper = value => norm(value).toUpperCase();
 
@@ -36,10 +35,12 @@
   }
 
   function quantity() {
+    const assigned = window.EquipmentCapacity?.getAssignedQuantity?.();
+    if (assigned) return assigned;
     const raw = String($('#equipmentQuantity')?.value || '').trim();
     if (!/^\d+$/.test(raw)) return 0;
     const n = Number(raw);
-    return Number.isSafeInteger(n) && n >= 1 && n <= MAX_PER_BOX ? n : 0;
+    return Number.isSafeInteger(n) && n >= 1 ? n : 0;
   }
 
   function boxKey(lot, box, cap) {
@@ -157,7 +158,7 @@
     button.disabled = !cap || !ready;
     button.textContent = ready?.box ? `Imprimir caja ${ready.box}` : 'Imprimir caja';
     button.title = !cap
-      ? `Asigna una CANTIDAD entre 1 y ${MAX_PER_BOX}.`
+      ? 'Asigna una CANTIDAD válida de 1 o más equipos.'
       : ready
         ? `Caja ${ready.box}: ${ready.count}/${cap}. Lista para impresión manual.`
         : `Se habilita cuando la caja alcance ${cap}/${cap} equipos.`;

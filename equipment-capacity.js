@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const MAX_PER_BOX = 64;
+  const CAPACITY_VERSION = '20260901-operator-limit1';
   const $ = (selector, root = document) => root.querySelector(selector);
   const norm = value => String(value ?? '').trim();
   const upper = value => norm(value).toUpperCase();
@@ -42,7 +42,7 @@
     const raw = norm(input?.value);
     if (!/^\d+$/.test(raw)) return 0;
     const value = Number(raw);
-    return Number.isSafeInteger(value) && value >= 1 && value <= MAX_PER_BOX ? value : 0;
+    return Number.isSafeInteger(value) && value >= 1 ? value : 0;
   }
 
   function validateQuantity({focus = true, announce = true} = {}) {
@@ -52,7 +52,7 @@
     input.classList.remove('field-valid', 'field-invalid');
     if (!cap) {
       if (norm(input.value)) input.classList.add('field-invalid');
-      if (announce) message('error', 'CANTIDAD inválida', `Asigna entre 1 y ${MAX_PER_BOX} equipos para esta caja.`);
+      if (announce) message('error', 'CANTIDAD inválida', 'Asigna un número entero de 1 o más equipos para esta caja.');
       if (focus) {
         input.focus({preventScroll:true});
         input.select?.();
@@ -106,17 +106,17 @@
     if (!input) return;
     input.type = 'number';
     input.min = '1';
-    input.max = String(MAX_PER_BOX);
+    input.removeAttribute('max');
     input.step = '1';
     input.inputMode = 'numeric';
     input.removeAttribute('aria-hidden');
     input.removeAttribute('tabindex');
-    input.placeholder = '1–64';
-    input.title = `Cantidad de equipos asignados a esta caja. Este número es el límite real de la caja. Mínimo 1, máximo ${MAX_PER_BOX}.`;
+    input.placeholder = 'Cantidad';
+    input.title = 'Cantidad de equipos asignados a esta caja. El número ingresado por el operador será el límite real de la caja.';
 
     const field = input.closest('label');
     const title = field?.querySelector('span');
-    if (title) title.innerHTML = `CANTIDAD <small>Límite de la caja · máximo ${MAX_PER_BOX}</small>`;
+    if (title) title.innerHTML = 'CANTIDAD <small>Límite definido por el operador</small>';
     $('#equipmentQuantityDisplay')?.remove();
   }
 
@@ -211,8 +211,7 @@
     if (!quantity || !add) return;
 
     quantity.addEventListener('input', event => {
-      let value = String(event.target.value || '').replace(/\D/g, '');
-      if (value.length > 2) value = value.slice(0, 2);
+      const value = String(event.target.value || '').replace(/\D/g, '');
       if (event.target.value !== value) event.target.value = value;
       const cap = assignedQuantity();
       event.target.classList.toggle('field-valid', !!cap);
@@ -292,7 +291,8 @@
   else install();
 
   window.EquipmentCapacity = {
-    maxPerBox: MAX_PER_BOX,
+    version: CAPACITY_VERSION,
+    maxPerBox: null,
     getAssignedQuantity: assignedQuantity,
     validateQuantity,
     getCurrentCount: currentCount,

@@ -1,7 +1,6 @@
 (() => {
   'use strict';
 
-  const MAX_PER_BOX = 64;
   const $ = selector => document.querySelector(selector);
   const norm = value => String(value ?? '').trim();
   const upper = value => norm(value).toUpperCase();
@@ -48,7 +47,7 @@
     const raw = String(value ?? '').trim();
     if (!/^\d+$/.test(raw)) return 0;
     const n = Number(raw);
-    return Number.isSafeInteger(n) && n >= 1 && n <= MAX_PER_BOX ? n : 0;
+    return Number.isSafeInteger(n) && n >= 1 ? n : 0;
   }
 
   function normalizedRecord(obj) {
@@ -192,18 +191,22 @@
       .replace(/'/g, '&#039;');
   }
 
+  function quantityDisplay(context) {
+    return context.quantity || '—';
+  }
+
   function setMessage(context) {
     const panel = $('#equipmentValidationMessage');
     if (!panel) return;
     panel.className = 'equipment-validation ok';
-    panel.innerHTML = `<span class="equipment-validation-icon">✓</span><div><strong>Registro cargado y contexto restaurado</strong><small>Caja ${escapeHtml(context.box)}: ${context.count}/${context.quantity} equipos · Lote ${escapeHtml(context.lot)}${context.process ? ` · ${escapeHtml(context.process)}` : ''}. Puedes continuar desde SERIAL.</small></div>`;
+    panel.innerHTML = `<span class="equipment-validation-icon">✓</span><div><strong>Registro cargado y contexto restaurado</strong><small>Caja ${escapeHtml(context.box)}: ${context.count}/${escapeHtml(quantityDisplay(context))} equipos · Lote ${escapeHtml(context.lot)}${context.process ? ` · ${escapeHtml(context.process)}` : ''}. ${context.quantity ? 'Puedes continuar desde SERIAL.' : 'Asigna CANTIDAD antes de continuar.'}</small></div>`;
   }
 
   function showToast(context) {
     const toast = $('#toast');
     if (!toast) return;
     toast.className = 'toast show ok';
-    toast.innerHTML = `<strong>Contexto restaurado</strong><span>${escapeHtml(lastFileName || 'Registro cargado')} · Caja ${escapeHtml(context.box)} · ${context.count}/${context.quantity} equipos.</span>`;
+    toast.innerHTML = `<strong>Contexto restaurado</strong><span>${escapeHtml(lastFileName || 'Registro cargado')} · Caja ${escapeHtml(context.box)} · ${context.count}/${escapeHtml(quantityDisplay(context))} equipos.</span>`;
     clearTimeout(showToast.timer);
     showToast.timer = setTimeout(() => toast.classList.remove('show'), 4800);
   }
@@ -228,6 +231,10 @@
     });
   }
 
+  function currentOperatorQuantity() {
+    return normalizeQuantity(window.EquipmentCapacity?.getAssignedQuantity?.() || $('#equipmentQuantity')?.value);
+  }
+
   function applyContext() {
     if (!waitingForImport) return false;
     const source = rows();
@@ -240,7 +247,7 @@
     const context = {
       ...rowContext,
       process: norm(fileContext?.process) || norm(rowContext.process),
-      quantity: normalizeQuantity(fileContext?.quantity) || normalizeQuantity(rowContext.quantity) || MAX_PER_BOX
+      quantity: normalizeQuantity(fileContext?.quantity) || normalizeQuantity(rowContext.quantity) || currentOperatorQuantity()
     };
 
     if (fileContext?.lot && fileContext?.box) {
@@ -249,13 +256,13 @@
         context.lot = fileContext.lot;
         context.box = fileContext.box;
         context.count = matching.length;
-        context.quantity = normalizeQuantity(fileContext.quantity) || MAX_PER_BOX;
+        context.quantity = normalizeQuantity(fileContext.quantity) || context.quantity;
       }
     }
 
     setInput('#equipmentLot', context.lot);
     setInput('#equipmentBox', context.box);
-    setInput('#equipmentQuantity', context.quantity);
+    setInput('#equipmentQuantity', context.quantity || '');
 
     if (context.process) {
       if (typeof window.EquipmentRegistry?.setCurrentProcess === 'function') {
@@ -267,7 +274,7 @@
     }
 
     const currentCount = $('#equipmentCurrentBoxCount');
-    if (currentCount) currentCount.textContent = `${context.count} / ${context.quantity}`;
+    if (currentCount) currentCount.textContent = `${context.count} / ${quantityDisplay(context)}`;
     const currentLabel = $('#equipmentCurrentBoxLabel');
     if (currentLabel) currentLabel.textContent = `${upper(context.lot)} · ${upper(context.box)}${context.process ? ` · ${context.process}` : ''}`;
 
@@ -289,7 +296,7 @@
     showToast(context);
 
     waitingForImport = false;
-    setTimeout(() => serial?.focus({preventScroll:true}), 80);
+    setTimeout(() => (context.quantity ? serial : $('#equipmentQuantity'))?.focus({preventScroll:true}), 80);
     return true;
   }
 

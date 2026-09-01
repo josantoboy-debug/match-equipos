@@ -2,7 +2,6 @@
   'use strict';
 
   const $ = selector => document.querySelector(selector);
-  const MAX_PER_BOX = 64;
   let lastCount = 0;
   let focusTimer = null;
   let lastDuplicateSignature = '';
@@ -17,8 +16,12 @@
   }
 
   function validQuantity() {
-    const value = String($('#equipmentQuantity')?.value || '').trim();
-    return /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= MAX_PER_BOX;
+    const assigned = window.EquipmentCapacity?.getAssignedQuantity?.();
+    if (assigned) return true;
+    const raw = String($('#equipmentQuantity')?.value || '').trim();
+    if (!/^\d+$/.test(raw)) return false;
+    const value = Number(raw);
+    return Number.isSafeInteger(value) && value >= 1;
   }
 
   function validSerial() {

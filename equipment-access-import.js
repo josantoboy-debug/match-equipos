@@ -3,7 +3,6 @@
 
   const $ = selector => document.querySelector(selector);
   const UNKNOWN_UA = '0000000000000000';
-  const MAX_PER_BOX = 64;
   let converting = false;
 
   const escapeHtml = value => String(value ?? '')
@@ -93,7 +92,7 @@
     if (!context.process) missing.push('ASIGNACIÓN / PROCESO');
     if (!context.lot) missing.push('LOTE');
     if (!context.box) missing.push('CAJA');
-    if (!Number.isSafeInteger(context.quantity) || context.quantity < 1 || context.quantity > MAX_PER_BOX) missing.push(`CANTIDAD (1-${MAX_PER_BOX})`);
+    if (!Number.isSafeInteger(context.quantity) || context.quantity < 1) missing.push('CANTIDAD (1 o más)');
     if (missing.length) {
       throw new Error(`Antes de importar Access completa: ${missing.join(', ')}.`);
     }
@@ -322,7 +321,7 @@
     if (!String(input.accept || '').toLowerCase().includes('.accdb')) {
       input.accept = `${input.accept ? `${input.accept},` : ''}.accdb,application/msaccess,application/x-msaccess,application/vnd.ms-access`;
     }
-    if (button) button.title = `ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y CANTIDAD desde la pantalla. Máximo ${MAX_PER_BOX}.`;
+    if (button) button.title = 'ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y CANTIDAD desde la pantalla.';
 
     if (input.dataset.accdbImportInstalled === '1') return;
     input.dataset.accdbImportInstalled = '1';
