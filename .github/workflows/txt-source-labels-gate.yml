@@ -1,0 +1,229 @@
+name: TXT source labels gate
+
+on:
+  push:
+    branches:
+      - repair/txt-source-labels-20260901
+      - main
+    paths:
+      - index.html
+      - match-cross-search.js
+      - .github/workflows/txt-source-labels-gate.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - index.html
+      - match-cross-search.js
+      - .github/workflows/txt-source-labels-gate.yml
+
+permissions:
+  contents: read
+
+jobs:
+  txt-source-labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax references and source-role contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          python3 <<'PY'
+          from pathlib import Path
+          html=Path('index.html').read_text()
+          js=Path('match-cross-search.js').read_text()
+          required_html=[
+            'data-txt-source-labels-version="20260901-txtlabels1"',
+            '>Aquí archivo de base</button>',
+            '>Archivo para comparar</button>',
+            '>Carpeta para comparar</button>',
+            'Base: no cargada · Comparación: sin archivos cargados',
+            'match-cross-search.js?v=20260901-searchindex1&ui=20260901-txtlabels1',
+            'id="crossMatchExcelInput" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods"',
+            'id="crossMatchTxtInput" type="file" accept=".txt,text/plain" multiple',
+            'id="crossMatchFolderInput" type="file" accept=".txt,text/plain" multiple webkitdirectory directory',
+          ]
+          for marker in required_html:
+            assert marker in html, marker
+          forbidden_html=[
+            '>Excel maestro</button>',
+            '>TXT (varios)</button>',
+            '>Carpeta TXT</button>',
+            'Excel maestro: no cargado · TXT: sin bases cargadas',
+          ]
+          for marker in forbidden_html:
+            assert marker not in html, marker
+          required_js=[
+            'Base: ${state.excelFile}',
+            'Comparación: ${state.txtSources.size}',
+            '<span>Base</span>',
+            '<span>Comparación</span>',
+            'BASE · ${esc(roleLabel(e.role))}',
+            '<span class="mini-badge">COMPARACIÓN</span>',
+            'Coincidencias estructuradas solo en la base',
+            'Coincidencias estructuradas solo en comparación',
+            "if(!/^(xlsx|xls|xlsm|xlsb|ods)$/i.test(ext(file.name)))",
+            "if(!file||!/^txt$/i.test(ext(file.name)))continue",
+          ]
+          for marker in required_js:
+            assert marker in js, marker
+          assert 'document.write' not in js
+          print('TXT_SOURCE_LABELS_STATIC_OK labels=roles inputs=unchanged cache=busted js_syntax=all')
+          PY
+
+      - name: Strict matching contract unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const assert=require('assert');
+          const C=require('./match-cross-contract.js');
+          const wb=C.parseWorkbookModel('base.xlsx',[{name:'Datos',rows:[['SR','UA'],['M91504EQL152','000-01174-04427-010']]}]);
+          const txt=C.parseTxt('000-01174-04427-010\tM91504EQL152\nCODIGO-SUELTO-77','comparar.txt');
+          let r=C.search('M91504EQL152',wb.records,txt.records);
+          assert.strictEqual(r.links.length,1);
+          assert.strictEqual(r.links[0].exactPair,true);
+          r=C.search('CODIGOSUELTO77',wb.records,txt.records);
+          assert.strictEqual(r.links.length,0);
+          assert.strictEqual(r.discoveryHits.length,1);
+          console.log('TXT_SOURCE_LABELS_STRICT_MATCH_OK exact_pair=unchanged generic_txt=no_match');
+          NODE
+
+      - name: Install browser dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local app
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4179 --bind 127.0.0.1 >/tmp/txt-labels-http.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4179/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/txt-labels-http.log
+          exit 1
+
+      - name: Browser desktop tablet mobile cache CORS offline and responsiveness
+        shell: bash
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: |
+          set -euo pipefail
+          cat >/tmp/txt-labels-browser.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const UI='20260901-txtlabels1';
+          const cors={
+            'access-control-allow-origin':'*',
+            'access-control-allow-headers':'apikey,content-type,authorization,x-client-info,prefer',
+            'access-control-allow-methods':'POST,OPTIONS,GET'
+          };
+          async function run(browser,name,width,height){
+            const page=await browser.newPage();
+            await page.setViewport({width,height,deviceScaleFactor:1});
+            const errors=[],requests=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.setRequestInterception(true);
+            page.on('request',req=>{
+              const u=req.url(); requests.push(u);
+              if(/^https:\/\/cdn\.sheetjs\.com/.test(u)) return req.respond({status:200,contentType:'application/javascript',headers:{'access-control-allow-origin':'*'},body:'window.XLSX=window.XLSX||{};'});
+              if(u.includes('yvlayxmhcngdqribcmkh.supabase.co')){
+                if(req.method()==='OPTIONS') return req.respond({status:204,headers:cors,body:''});
+                if(u.includes('core_list_operators_service')) return req.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true,"bootstrapped":true,"operators":[]}'});
+                return req.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true}'});
+              }
+              req.continue();
+            });
+            await page.goto(`http://127.0.0.1:4179/?txtlabels=${name}`,{waitUntil:'domcontentloaded',timeout:20000});
+            await page.waitForFunction(()=>window.MatchCrossSearch&&document.querySelector('#operatorLock'),{timeout:10000});
+            const login=await page.$eval('#operatorLock',el=>({display:getComputedStyle(el).display,visible:el.getBoundingClientRect().height>0,inert:document.querySelector('main.app')?.hasAttribute('inert')}));
+            assert.ok(login.display!=='none'&&login.visible,`${name}: access screen not visible`);
+            assert.ok(await page.$('#operatorSelect'),`${name}: central operator selector missing`);
+            await page.evaluate(()=>{const lock=document.querySelector('#operatorLock');if(lock)lock.style.display='none';document.querySelector('main.app')?.removeAttribute('inert');});
+            const labels=await page.evaluate(()=>({
+              base:document.querySelector('#crossMatchExcelBtn')?.textContent.trim(),
+              compare:document.querySelector('#crossMatchTxtBtn')?.textContent.trim(),
+              folder:document.querySelector('#crossMatchFolderBtn')?.textContent.trim(),
+              marker:document.documentElement.dataset.txtSourceLabelsVersion,
+              initial:document.querySelector('#crossMatchStatus')?.textContent.trim(),
+            }));
+            assert.deepStrictEqual(labels,{base:'Aquí archivo de base',compare:'Archivo para comparar',folder:'Carpeta para comparar',marker:UI,initial:'Base: no cargada · Comparación: sin archivos cargados'});
+            await page.evaluate(()=>{
+              MatchCrossSearch.ingestWorkbookModel('base.xlsx',[{name:'Datos',rows:[['SR','UA'],['M91504EQL152','000-01174-04427-010']]}]);
+              MatchCrossSearch.ingestTxtText('comparar.txt','000-01174-04427-010\tM91504EQL152');
+              const i=document.querySelector('#searchInput');i.value='M91504EQL152';
+              window.MatchSearchModes?.executeSearch?.();
+            });
+            const status=await page.$eval('#crossMatchStatus',el=>el.textContent);
+            assert.ok(status.includes('Base: base.xlsx'),`${name}: base status missing`);
+            assert.ok(status.includes('Comparación: 1 archivo'),`${name}: compare status missing`);
+            assert.ok(!status.includes('Excel maestro')&&!status.includes('TXT:'),`${name}: format labels leaked in status`);
+            const section=await page.$eval('.cross-match-section',el=>el.textContent);
+            assert.ok(section.includes('Base')&&section.includes('Comparación'),`${name}: source-role labels missing in results`);
+            assert.strictEqual(await page.$$eval('.cross-match-card.exact',els=>els.length),1,`${name}: strict exact match changed`);
+            const geom=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth,box:document.querySelector('.cross-match-source-box').getBoundingClientRect().width,panel:document.querySelector('.search-panel').getBoundingClientRect().width}));
+            assert.ok(geom.scroll<=geom.width+1,`${name}: horizontal overflow`);
+            assert.ok(geom.box>0&&geom.box<=geom.panel+1,`${name}: source box overflow`);
+            assert.ok(requests.some(u=>u.includes(`match-cross-search.js?v=20260901-searchindex1&ui=${UI}`)),`${name}: new cache key not requested`);
+            assert.ok(!requests.some(u=>/match-cross-search\.js\?v=20260901-searchindex1$/.test(u)),`${name}: old unversioned UI asset requested`);
+            await page.setOfflineMode(true);
+            await Promise.race([page.evaluate(()=>new Promise(r=>setTimeout(r,100))),new Promise((_,rej)=>setTimeout(()=>rej(new Error(`${name}: event loop blocked`)),2000))]);
+            assert.strictEqual(await page.$eval('#crossMatchExcelBtn',el=>el.textContent.trim()),'Aquí archivo de base');
+            await page.setOfflineMode(false);
+            assert.deepStrictEqual(errors,[],`${name}: console/page errors ${JSON.stringify(errors)}`);
+            console.log(`TXT_SOURCE_LABELS_${name.toUpperCase()}_OK login=visible labels=roles cors=simulated offline=responsive overflow=none`);
+            await page.close();
+          }
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN,args:['--no-sandbox','--disable-setuid-sandbox']});
+            await run(browser,'desktop',1536,864);
+            await run(browser,'tablet',820,1180);
+            await run(browser,'mobile',390,844);
+            await browser.close();
+            console.log('TXT_SOURCE_LABELS_BROWSER_GATE_OK');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node /tmp/txt-labels-browser.cjs
+
+  verify-public-txt-source-labels:
+    if: github.ref == 'refs/heads/main'
+    needs: txt-source-labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify public source-role labels after Pages deploy
+        shell: bash
+        env:
+          PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
+          UI_VERSION: 20260901-txtlabels1
+        run: |
+          set -uo pipefail
+          ok=0
+          for attempt in {1..36}; do
+            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?txtlabels=${nonce}" || true)
+            if [ "$code" = "200" ] \
+              && grep -F "data-txt-source-labels-version=\"${UI_VERSION}\"" /tmp/live.html >/dev/null \
+              && grep -F '>Aquí archivo de base</button>' /tmp/live.html >/dev/null \
+              && grep -F '>Archivo para comparar</button>' /tmp/live.html >/dev/null \
+              && grep -F '>Carpeta para comparar</button>' /tmp/live.html >/dev/null \
+              && grep -F "match-cross-search.js?v=20260901-searchindex1&ui=${UI_VERSION}" /tmp/live.html >/dev/null; then
+              js_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live-cross.js -w '%{http_code}' "${PUBLIC_URL}match-cross-search.js?v=20260901-searchindex1&ui=${UI_VERSION}&verify=${nonce}" || true)
+              if [ "$js_code" = "200" ] \
+                && grep -F 'Base: ${state.excelFile}' /tmp/live-cross.js >/dev/null \
+                && grep -F 'Comparación: ${state.txtSources.size}' /tmp/live-cross.js >/dev/null; then
+                ok=1
+                echo "TXT_SOURCE_LABELS_LIVE_OK url=${PUBLIC_URL} http=${code} version=${UI_VERSION}"
+                break
+              fi
+            fi
+            echo "Attempt ${attempt}: public TXT source labels not ready yet; retrying"
+            sleep 5
+          done
+          test "$ok" = "1"

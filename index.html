@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1" data-general-search-version="20260901-generalsearch1" data-match-registration-mode-version="20260901-matchregmode1">
+<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1" data-general-search-version="20260901-generalsearch1" data-match-registration-mode-version="20260901-matchregmode1" data-txt-source-labels-version="20260901-txtlabels1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -15,6 +15,7 @@
   <meta name="cross-match-version" content="20260901-searchindex1">
   <meta name="general-search-version" content="20260901-generalsearch1">
   <meta name="match-registration-mode-version" content="20260901-matchregmode1">
+  <meta name="txt-source-labels-version" content="20260901-txtlabels1">
   <title>UNITCHECK</title>
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
@@ -161,18 +162,18 @@
           <button id="searchRunBtn" class="search-run-btn" type="button" hidden>Buscar</button>
         </div>
         <div id="searchModeHelp" class="search-mode-help">Busca mientras escribes o escaneas.</div>
-        <div class="cross-match-source-box" data-cross-match-version="20260901-searchindex1">
+        <div class="cross-match-source-box" data-cross-match-version="20260901-searchindex1" data-txt-source-labels-version="20260901-txtlabels1">
           <div class="cross-match-source-head"><strong>Cruce + índice universal</strong><span>Match estricto · búsqueda en todas las celdas</span></div>
           <div class="cross-match-source-actions">
-            <button id="crossMatchExcelBtn" type="button">Excel maestro</button>
-            <button id="crossMatchTxtBtn" type="button">TXT (varios)</button>
-            <button id="crossMatchFolderBtn" type="button">Carpeta TXT</button>
+            <button id="crossMatchExcelBtn" type="button">Aquí archivo de base</button>
+            <button id="crossMatchTxtBtn" type="button">Archivo para comparar</button>
+            <button id="crossMatchFolderBtn" type="button">Carpeta para comparar</button>
             <button id="crossMatchClearBtn" type="button">Limpiar fuentes</button>
           </div>
           <input id="crossMatchExcelInput" type="file" accept=".xlsx,.xls,.xlsm,.xlsb,.ods" hidden>
           <input id="crossMatchTxtInput" type="file" accept=".txt,text/plain" multiple hidden>
           <input id="crossMatchFolderInput" type="file" accept=".txt,text/plain" multiple webkitdirectory directory hidden>
-          <div id="crossMatchStatus" class="cross-match-status"><span class="cross-match-dot"></span><span>Excel maestro: no cargado · TXT: sin bases cargadas</span></div>
+          <div id="crossMatchStatus" class="cross-match-status"><span class="cross-match-dot"></span><span>Base: no cargada · Comparación: sin archivos cargados</span></div>
         </div>
         <div id="fileIndexStatus" class="file-index-status"><span class="file-index-dot"></span><span>Sin archivos indexados</span></div>
         <div id="locationSourceStatus" class="file-index-status"><span class="file-index-dot"></span><span>Sin bases TXT de ubicación</span></div>
@@ -269,7 +270,7 @@
 <script src="match-cross-contract.js?v=20260901-searchindex1"></script>
 <script src="app.js?v=20260831-matchlocation1&amp;matchreg=20260901-matchregmode1"></script>
 <script src="ui-sounds.js?v=20260831-sound1"></script>
-<script src="match-cross-search.js?v=20260901-searchindex1"></script>
+<script src="match-cross-search.js?v=20260901-searchindex1&ui=20260901-txtlabels1"></script>
 <script src="search-mode.js?v=20260831-autoclear3-crossmatch1"></script>
 <script src="file-index.js"></script>
 <script src="matches-export.js"></script>
