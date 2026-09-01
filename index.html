@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1" data-general-search-version="20260901-generalsearch1">
+<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1" data-general-search-version="20260901-generalsearch1" data-match-registration-mode-version="20260901-matchregmode1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -14,10 +14,12 @@
   <meta name="brand-version" content="20260831-unitcheck1">
   <meta name="cross-match-version" content="20260901-searchindex1">
   <meta name="general-search-version" content="20260901-generalsearch1">
+  <meta name="match-registration-mode-version" content="20260901-matchregmode1">
   <title>UNITCHECK</title>
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
   <link rel="stylesheet" href="general-search.css?v=20260901-generalsearch1">
+  <link rel="stylesheet" href="match-register-mode.css?v=20260901-matchregmode1">
   <link rel="stylesheet" href="file-index.css">
   <link rel="stylesheet" href="match-cross-search.css?v=20260901-searchindex1">
   <link rel="stylesheet" href="equipment-register.css">
@@ -127,6 +129,14 @@
       <div class="mode-switch">
         <button class="mode active" data-mode="Carcasa">CARCASA</button>
         <button class="mode" data-mode="Equipo">EQUIPO / PLACA</button>
+      </div>
+      <div class="match-register-mode-control" data-match-registration-mode-version="20260901-matchregmode1">
+        <span>MODO REGISTRO</span>
+        <button id="matchRegisterModeBtn" class="match-register-mode-toggle manual" type="button" aria-pressed="false">
+          <strong>MANUAL</strong>
+          <small>Usa Verificar / Registrar</small>
+        </button>
+        <p id="matchRegisterModeHelp">ENTER pasa de Host SN a UA. En UA, ENTER deja listo el botón; Verificar / Registrar guarda el registro.</p>
       </div>
       <div class="register-grid">
         <label><span>Host SN <small>12 caracteres · inicia M</small></span><input id="hostInput" class="code" autocomplete="off" placeholder="M91612EQNA60"></label>
@@ -257,7 +267,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="match-data-contract.js?v=20260831-matchlocation1"></script>
 <script src="match-cross-contract.js?v=20260901-searchindex1"></script>
-<script src="app.js?v=20260831-matchlocation1"></script>
+<script src="app.js?v=20260831-matchlocation1&amp;matchreg=20260901-matchregmode1"></script>
 <script src="ui-sounds.js?v=20260831-sound1"></script>
 <script src="match-cross-search.js?v=20260901-searchindex1"></script>
 <script src="search-mode.js?v=20260831-autoclear3-crossmatch1"></script>

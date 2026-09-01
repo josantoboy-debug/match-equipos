@@ -1,0 +1,183 @@
+name: Match registration mode gate
+
+on:
+  push:
+    branches:
+      - repair/registration-mode-step2-20260901
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'match-register-mode.css'
+      - '.github/workflows/match-registration-mode-gate.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'match-register-mode.css'
+      - '.github/workflows/match-registration-mode-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  match-registration-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate JavaScript syntax references and cache marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F 'data-match-registration-mode-version="20260901-matchregmode1"' index.html
+          grep -F '<meta name="match-registration-mode-version" content="20260901-matchregmode1">' index.html
+          grep -F 'match-register-mode.css?v=20260901-matchregmode1' index.html
+          grep -F 'app.js?v=20260831-matchlocation1&amp;matchreg=20260901-matchregmode1' index.html
+          grep -F "MATCH_REGISTRATION_MODE_VERSION = '20260901-matchregmode1'" app.js
+          grep -F "captureMode: 'manual'" app.js
+          grep -F "getCaptureMode:()=>state.captureMode" app.js
+          grep -F "if(state.captureMode==='automatic')manualRegister();else $('#registerBtn').focus();" app.js
+          grep -F "return state.captureMode==='automatic'?'Captura automática':'Captura manual';" app.js
+          ! grep -F '<script src="app.js?v=20260831-matchlocation1"></script>' index.html
+          ! grep -Eq 'document\.write|MutationObserver' app.js
+          for ref in $(grep -Eo '(src|href)="[^"?#]+\.(js|css)' index.html | sed -E 's/^(src|href)="//'); do
+            case "$ref" in http://*|https://*|//*) continue ;; esac
+            test -f "$ref" || { echo "Missing referenced asset: $ref"; exit 1; }
+          done
+          echo 'MATCH_REG_MODE_STATIC_OK'
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        run: |
+          python3 -m http.server 4178 --bind 127.0.0.1 > /tmp/match-reg-mode-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4178/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/match-reg-mode-http.log
+          exit 1
+
+      - name: Desktop tablet mobile manual and automatic smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/match-registration-mode-smoke.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const OP={id:'00000000-0000-4000-8000-000000000222',name:'Operador Prueba',role:'operator',active:true};
+          const viewports=[
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          async function seed(page){
+            await page.evaluateOnNewDocument(op=>{
+              localStorage.setItem('matchEquipos.operatorAccess.v1',JSON.stringify({version:1,operators:[{
+                id:op.id,name:op.name,role:op.role,active:true,cloud:true,pinHash:'fictitious-test-hash'
+              }]}));
+              sessionStorage.setItem('matchEquipos.activeOperator.v1',op.id);
+              sessionStorage.setItem('matchEquipos.cloudOperatorSession.v1',JSON.stringify({
+                operator:{id:op.id,name:op.name,role:op.role},offline:true,savedAt:new Date().toISOString()
+              }));
+            },OP);
+          }
+
+          async function intercept(page){
+            await page.setRequestInterception(true);
+            page.on('request',request=>{
+              const url=request.url();
+              if(url.includes('/rpc/core_list_operators_service')){
+                request.respond({status:200,contentType:'application/json',headers:{
+                  'access-control-allow-origin':'*',
+                  'access-control-allow-headers':'apikey,content-type',
+                  'access-control-allow-methods':'POST,OPTIONS'
+                },body:JSON.stringify({ok:true,bootstrapped:true,operators:[OP]})});
+              }else if(/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)){
+                request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+              }else if(url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')){
+                request.respond({status:400,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{"ok":false}'});
+              }else request.continue();
+            });
+          }
+
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',args:['--no-sandbox','--disable-setuid-sandbox']});
+            for(const viewport of viewports){
+              const page=await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const errors=[];
+              page.on('pageerror',error=>errors.push(String(error)));
+              await seed(page);
+              await intercept(page);
+              await page.goto(`http://127.0.0.1:4178/?match-registration-mode=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(()=>window.MatchEquiposCore?.registrationModeVersion==='20260901-matchregmode1'&&window.OperatorSession?.getCurrentOperator?.()?.name==='Operador Prueba',{timeout:7000});
+
+              const ui=await page.evaluate(()=>{
+                const button=document.querySelector('#matchRegisterModeBtn');
+                const rect=button?.getBoundingClientRect();
+                return {
+                  captureMode:window.MatchEquiposCore.getCaptureMode(),
+                  marker:document.documentElement.dataset.matchRegistrationModeVersion,
+                  buttonText:button?.querySelector('strong')?.textContent,
+                  visible:!!rect&&rect.width>0&&rect.height>0,
+                  mainInert:document.querySelector('main.app')?.hasAttribute('inert'),
+                  cssVersioned:[...document.styleSheets].some(sheet=>(sheet.href||'').includes('match-register-mode.css?v=20260901-matchregmode1')),
+                  appVersioned:[...document.scripts].some(script=>(script.src||'').includes('app.js?v=20260831-matchlocation1&matchreg=20260901-matchregmode1'))
+                };
+              });
+              assert.deepStrictEqual(ui,{captureMode:'manual',marker:'20260901-matchregmode1',buttonText:'MANUAL',visible:true,mainInert:false,cssVersioned:true,appVersioned:true});
+
+              if(viewport.name==='desktop'){
+                await page.type('#hostInput','M91612EQNA60');
+                await page.keyboard.press('Enter');
+                await page.type('#uaInput','0000123456789012');
+                await page.keyboard.press('Enter');
+                assert.deepStrictEqual(await page.evaluate(()=>({count:MatchEquiposCore.getState().records.length,active:document.activeElement.id})),{count:0,active:'registerBtn'});
+                await page.click('#registerBtn');
+                assert.strictEqual(await page.evaluate(()=>MatchEquiposCore.getState().records[0].origin),'Captura manual');
+
+                await page.click('.mode[data-mode="Equipo"]');
+                await page.click('#matchRegisterModeBtn');
+                assert.strictEqual(await page.evaluate(()=>MatchEquiposCore.getCaptureMode()),'automatic');
+                await page.type('#hostInput','M91612EQNA60');
+                await page.keyboard.press('Enter');
+                await page.type('#uaInput','0000123456789012');
+                await page.keyboard.press('Enter');
+                const finalState=await page.evaluate(()=>({
+                  origins:MatchEquiposCore.getState().records.map(row=>row.origin),
+                  matches:MatchEquiposCore.getState().matches.filter(match=>!match.voided).length,
+                  host:document.querySelector('#hostInput').value,
+                  ua:document.querySelector('#uaInput').value
+                }));
+                assert.deepStrictEqual(finalState,{origins:['Captura manual','Captura automática'],matches:1,host:'',ua:''});
+              }
+
+              await Promise.race([
+                page.evaluate(()=>new Promise(resolve=>setTimeout(()=>resolve('responsive'),100))),
+                new Promise((_,reject)=>setTimeout(()=>reject(new Error('Page event loop blocked')),2000))
+              ]);
+              assert.deepStrictEqual(errors,[]);
+              await page.close();
+            }
+            await browser.close();
+            console.log('MATCH_REG_MODE_BROWSER_OK');
+          })().catch(error=>{console.error(error);process.exit(1);});
+          NODE
+          node /tmp/match-registration-mode-smoke.cjs
+
+      - name: Clean and stale cache reference check
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS 'http://127.0.0.1:4178/?cache=clean' | grep -F 'data-match-registration-mode-version="20260901-matchregmode1"'
+          curl -fsS 'http://127.0.0.1:4178/?cache=stale' | grep -F 'app.js?v=20260831-matchlocation1&amp;matchreg=20260901-matchregmode1'
+          curl -fsS 'http://127.0.0.1:4178/?cache=stale' | grep -F 'match-register-mode.css?v=20260901-matchregmode1'
+          ! curl -fsS 'http://127.0.0.1:4178/?cache=stale' | grep -F '<script src="app.js?v=20260831-matchlocation1"></script>'
+          echo 'MATCH_REG_MODE_CACHE_OK'
