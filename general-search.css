@@ -1,0 +1,22 @@
+/* General search UI version: 20260901-generalsearch1 */
+.general-search-scope{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:0 0 10px;
+  padding:9px 11px;
+  border:1px solid var(--line,#263247);
+  border-radius:10px;
+  background:var(--panel2,#0e1724);
+  color:var(--muted,#94a3b8);
+  font-size:11px;
+}
+.general-search-scope strong{color:var(--text,#edf3fb);font-size:11px}
+.general-search-scope span{font-weight:850;letter-spacing:.03em}
+.general-search-scope small{margin-left:auto;color:var(--muted,#94a3b8);font-size:10px}
+@media(max-width:620px){
+  .general-search-scope{align-items:flex-start}
+  .general-search-scope small{width:100%;margin-left:0}
+}
+@media print{.general-search-scope{display:none!important}}

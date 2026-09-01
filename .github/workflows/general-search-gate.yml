@@ -1,0 +1,65 @@
+name: General search gate
+
+on:
+  push:
+    branches:
+      - repair/general-search-20260901
+      - main
+    paths:
+      - index.html
+      - app.js
+      - search-mode.js
+      - general-search.css
+      - .github/workflows/general-search-gate.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - index.html
+      - app.js
+      - search-mode.js
+      - general-search.css
+      - .github/workflows/general-search-gate.yml
+
+permissions:
+  contents: read
+
+jobs:
+  general-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax references and search ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          grep -F 'data-general-search-version="20260901-generalsearch1"' index.html
+          grep -F '<meta name="general-search-version" content="20260901-generalsearch1">' index.html
+          grep -F 'general-search.css?v=20260901-generalsearch1' index.html
+          grep -F '<h2>Búsqueda general</h2>' index.html
+          grep -F 'id="generalSearchScope"' index.html
+          grep -F 'CARCASA + EQUIPO' index.html
+          grep -F 'placeholder="Serial o UA · busca en Carcasa + Equipo…"' index.html
+          test -s general-search.css
+          grep -F 'General search UI version: 20260901-generalsearch1' general-search.css
+          ! grep -R 'document\.write' app.js search-mode.js
+          ! grep -R 'MutationObserver' search-mode.js
+
+          node <<'NODE'
+          const assert=require('assert');
+          const fs=require('fs');
+          const app=fs.readFileSync('app.js','utf8');
+          const mode=fs.readFileSync('search-mode.js','utf8');
+          const start=app.indexOf('function renderSearch()');
+          const end=app.indexOf('function renderAll()',start);
+          assert(start>=0&&end>start,'renderSearch not found');
+          const body=app.slice(start,end);
+          assert(body.includes('activeRecords().forEach'),'general search must inspect active records');
+          assert(body.includes('r.host.includes(normHost(raw))||r.uaNorm.includes(q)'),'general search must search Host SN and UA');
+          assert(!body.includes('state.mode'),'general search must not depend on registration mode');
+          assert(mode.includes('const originalSearchHandler = input.oninput;'),'search-mode must remain the single adapter over core search');
+          assert(mode.includes('window.MatchSearchModes ='),'global search owner missing');
+          console.log('GENERAL_SEARCH_STATIC_GATE_OK scope=carcasa+equipo host=ok ua=ok mode_independent=ok single_owner=ok');
+          NODE

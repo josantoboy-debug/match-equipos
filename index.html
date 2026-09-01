@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1">
+<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1" data-general-search-version="20260901-generalsearch1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -13,9 +13,11 @@
   <meta name="ui-sound-version" content="20260831-sound1">
   <meta name="brand-version" content="20260831-unitcheck1">
   <meta name="cross-match-version" content="20260901-searchindex1">
+  <meta name="general-search-version" content="20260901-generalsearch1">
   <title>UNITCHECK</title>
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
   <link rel="stylesheet" href="search-mode.css">
+  <link rel="stylesheet" href="general-search.css?v=20260901-generalsearch1">
   <link rel="stylesheet" href="file-index.css">
   <link rel="stylesheet" href="match-cross-search.css?v=20260901-searchindex1">
   <link rel="stylesheet" href="equipment-register.css">
@@ -134,15 +136,18 @@
       <div id="resultPanel" class="result neutral"><div class="result-icon">⌁</div><div><h3>Listo para verificar</h3><p>Selecciona Carcasa o Equipo y escanea los dos códigos.</p></div></div>
     </article>
 
-    <aside class="panel search-panel">
-      <div class="panel-head"><div><h2>Búsqueda global</h2><p>Registros + cruce estricto + índice universal de fuentes</p></div></div>
+    <aside class="panel search-panel" data-general-search-version="20260901-generalsearch1">
+      <div class="panel-head"><div><h2>Búsqueda general</h2><p>Consulta simultáneamente registros de Carcasa y Equipo; además integra cruce e índice universal de fuentes.</p></div></div>
       <div class="search-pad">
+        <div id="generalSearchScope" class="general-search-scope" role="note" aria-label="Alcance de la búsqueda general">
+          <strong>Busca en ambos:</strong><span>CARCASA + EQUIPO</span><small>Serial / Host SN y UA</small>
+        </div>
         <div class="search-mode-switch" role="group" aria-label="Modo de búsqueda">
           <button id="searchModeAuto" class="search-mode-btn active" type="button">Automático</button>
           <button id="searchModeManual" class="search-mode-btn" type="button">Manual</button>
         </div>
         <div class="search-control-row">
-          <input id="searchInput" class="search" placeholder="Host SN, UA, carcasa o parte del código…" autocomplete="off">
+          <input id="searchInput" class="search" placeholder="Serial o UA · busca en Carcasa + Equipo…" autocomplete="off">
           <button id="searchRunBtn" class="search-run-btn" type="button" hidden>Buscar</button>
         </div>
         <div id="searchModeHelp" class="search-mode-help">Busca mientras escribes o escaneas.</div>
@@ -232,7 +237,7 @@
     </div>
     <div id="workspaceBody"></div>
   </section>
-  <p class="footnote">El índice universal busca todas las celdas útiles y conserva archivo/hoja/fila/columna o archivo/línea/columna. Un Match se crea únicamente con la validación estricta Host SN + UA.</p>
+  <p class="footnote">La Búsqueda general consulta Carcasa y Equipo sin alterar el modo de registro. El índice universal busca todas las celdas útiles y conserva archivo/hoja/fila/columna o archivo/línea/columna. Un Match se crea únicamente con la validación estricta Host SN + UA.</p>
 </main>
 
 <footer class="app-footer" aria-label="Créditos de desarrollo">
