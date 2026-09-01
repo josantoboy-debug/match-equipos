@@ -4,8 +4,10 @@
   const Contract = window.MatchDataContract;
   if (!Contract) throw new Error('MatchDataContract no está cargado.');
 
+  const MATCH_REGISTRATION_MODE_VERSION = '20260901-matchregmode1';
+
   const state = {
-    mode: 'Carcasa', records: [], matches: [], found: [], events: [],
+    mode: 'Carcasa', captureMode: 'manual', records: [], matches: [], found: [], events: [],
     recordSeq: 1, matchSeq: 1, foundSeq: 1, eventSeq: 1,
     dirty: false, view: 'recent', filter: 'Todos', importPlans: [], importFile: '',
     locationEntries: [], locationSources: new Map(), locationInvalid: []
@@ -112,23 +114,50 @@
     addEvent(type,rec.host,rec.ua,match?match.status:rec.status,match?match.id:location); markDirty(); return result;
   }
 
+  function captureOrigin(){
+    return state.captureMode==='automatic'?'Captura automática':'Captura manual';
+  }
+
   function manualRegister(){
-    const host=$('#hostInput').value, ua=$('#uaInput').value; let res=register(state.mode,host,ua);
+    const host=$('#hostInput').value, ua=$('#uaInput').value; let res=register(state.mode,host,ua,{origin:captureOrigin()});
     if(res.code==='UA'){
       if(!confirm(`ADVERTENCIA DE UA\n\n${res.message}\n\n¿Registrar de todas formas?`))return;
-      res=register(state.mode,host,ua,{allowUA:true});
+      res=register(state.mode,host,ua,{allowUA:true,origin:captureOrigin()});
     }
     if(res.code==='CONFLICT'){
       if(!confirm(`HOST SN REPETIDO CON OTRO UA\n\n${res.message}\n\n¿Guardar el nuevo registro para revisión?`))return;
-      res=register(state.mode,host,ua,{allowConflict:true});
+      res=register(state.mode,host,ua,{allowConflict:true,origin:captureOrigin()});
       if(res.code==='UA'){
         if(!confirm(`El UA también tiene advertencia: ${res.message}\n\n¿Guardar de todas formas?`))return;
-        res=register(state.mode,host,ua,{allowConflict:true,allowUA:true});
+        res=register(state.mode,host,ua,{allowConflict:true,allowUA:true,origin:captureOrigin()});
       }
     }
     showResult(res); renderAll();
     if(res.ok){ $('#hostInput').value=''; $('#uaInput').value=''; $('#hostInput').focus(); }
     else toast(res.title,res.message,'error');
+  }
+
+  function updateCaptureModeUI(){
+    const button=$('#matchRegisterModeBtn'), help=$('#matchRegisterModeHelp');
+    if(!button)return;
+    const automatic=state.captureMode==='automatic';
+    button.classList.toggle('automatic',automatic);
+    button.classList.toggle('manual',!automatic);
+    button.setAttribute('aria-pressed',automatic?'true':'false');
+    button.innerHTML=automatic
+      ? '<strong>AUTOMÁTICO</strong><small>UA + ENTER registra</small>'
+      : '<strong>MANUAL</strong><small>Usa Verificar / Registrar</small>';
+    if(help) help.textContent=automatic
+      ? 'Escanea Host SN → ENTER → UA → ENTER. Si los datos son válidos, se registra usando el mismo motor estricto de Match.'
+      : 'ENTER pasa de Host SN a UA. En UA, ENTER deja listo el botón; Verificar / Registrar guarda el registro.';
+    document.documentElement.dataset.matchRegistrationModeVersion=MATCH_REGISTRATION_MODE_VERSION;
+    document.documentElement.dataset.matchRegistrationMode=state.captureMode;
+  }
+
+  function setCaptureMode(mode){
+    state.captureMode=mode==='automatic'?'automatic':'manual';
+    updateCaptureModeUI();
+    $('#hostInput')?.focus();
   }
 
   function undoMatch(mid,silent=false){
@@ -267,13 +296,20 @@
   let toastTimer;function toast(title,msg,tone=''){const t=$('#toast');if(!t)return;t.className=`toast show ${tone}`;t.innerHTML=`<strong>${esc(title)}</strong><span>${esc(msg)}</span>`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),4200);}
   function clearSession(){if(!confirm('Se borrarán todos los datos de la sesión actual. ¿Continuar?'))return;state.records=[];state.matches=[];state.found=[];state.events=[];state.recordSeq=1;state.matchSeq=1;state.foundSeq=1;state.eventSeq=1;state.dirty=false;const b=$('#sessionBadge');if(b){b.textContent='Sesión en memoria';b.className='badge';}showResult(null);renderAll();}
   function init(){
-    $$('.mode').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));$('#registerBtn').onclick=manualRegister;$('#hostInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#uaInput').focus();}};$('#uaInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();manualRegister();}};
+    $$('.mode').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+    $('#matchRegisterModeBtn').onclick=()=>setCaptureMode(state.captureMode==='manual'?'automatic':'manual');
+    $('#registerBtn').onclick=manualRegister;
+    $('#hostInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();$('#uaInput').focus();$('#uaInput').select?.();}};
+    $('#uaInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();if(state.captureMode==='automatic')manualRegister();else $('#registerBtn').focus();}};
     $('#importBtn').onclick=()=>$('#fileInput').click();$('#fileInput').onchange=e=>readExcel(e.target.files?.[0]);$('#runImport').onclick=runImport;$('#locationImportBtn').onclick=()=>$('#locationFileInput').click();$('#locationFileInput').onchange=e=>readLocationTxt(e.target.files?.[0]);$('#exportBtn').onclick=exportExcel;$('#newSessionBtn').onclick=clearSession;$('#searchInput').oninput=renderSearch;$('#saveEdit').onclick=saveEdit;
-    $$('.tabs button').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;$$('.tabs button').forEach(x=>x.classList.toggle('active',x===b));renderWorkspace();});$$('.filters button').forEach(b=>b.onclick=()=>{state.filter=b.dataset.filter;$$('.filters button').forEach(x=>x.classList.toggle('active',x===b));renderWorkspace();});$$('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));$$('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)closeModal(m.id);});window.addEventListener('beforeunload',e=>{if(state.dirty){e.preventDefault();e.returnValue='';}});setMode('Carcasa');showResult(null);renderAll();
+    $$('.tabs button').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;$$('.tabs button').forEach(x=>x.classList.toggle('active',x===b));renderWorkspace();});$$('.filters button').forEach(b=>b.onclick=()=>{state.filter=b.dataset.filter;$$('.filters button').forEach(x=>x.classList.toggle('active',x===b));renderWorkspace();});$$('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close));$$('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)closeModal(m.id);});window.addEventListener('beforeunload',e=>{if(state.dirty){e.preventDefault();e.returnValue='';}});setMode('Carcasa');setCaptureMode('manual');showResult(null);renderAll();
   }
 
   window.MatchEquiposCore = {
     register, locationForPair, getState:()=>state,
+    getCaptureMode:()=>state.captureMode,
+    setCaptureMode,
+    registrationModeVersion:MATCH_REGISTRATION_MODE_VERSION,
     importLocationText:(text,fileName='test.txt',direction='auto')=>Contract.parseLocationText(text,fileName,direction)
   };
 
