@@ -115,115 +115,106 @@ jobs:
           set -euo pipefail
           cat >/tmp/txt-labels-browser.cjs <<'NODE'
           const assert=require('assert');
-          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
-          const UI='20260901-txtlabels1';
-          const cors={
-            'access-control-allow-origin':'*',
-            'access-control-allow-headers':'apikey,content-type,authorization,x-client-info,prefer',
-            'access-control-allow-methods':'POST,OPTIONS,GET'
-          };
-          async function run(browser,name,width,height){
-            const page=await browser.newPage();
-            await page.setViewport({width,height,deviceScaleFactor:1});
-            const errors=[],requests=[];
-            page.on('pageerror',e=>errors.push(String(e)));
-            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-            await page.setRequestInterception(true);
-            page.on('request',req=>{
-              const u=req.url(); requests.push(u);
-              if(/^https:\/\/cdn\.sheetjs\.com/.test(u)) return req.respond({status:200,contentType:'application/javascript',headers:{'access-control-allow-origin':'*'},body:'window.XLSX=window.XLSX||{};'});
-              if(u.includes('yvlayxmhcngdqribcmkh.supabase.co')){
-                if(req.method()==='OPTIONS') return req.respond({status:204,headers:cors,body:''});
-                if(u.includes('core_list_operators_service')) return req.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true,"bootstrapped":true,"operators":[]}'});
-                return req.respond({status:200,contentType:'application/json',headers:cors,body:'{"ok":true}'});
-              }
-              req.continue();
-            });
-            await page.goto(`http://127.0.0.1:4179/?txtlabels=${name}`,{waitUntil:'domcontentloaded',timeout:20000});
-            await page.waitForFunction(()=>window.MatchCrossSearch&&document.querySelector('#operatorLock'),{timeout:10000});
-            const login=await page.$eval('#operatorLock',el=>({display:getComputedStyle(el).display,visible:el.getBoundingClientRect().height>0,inert:document.querySelector('main.app')?.hasAttribute('inert')}));
-            assert.ok(login.display!=='none'&&login.visible,`${name}: access screen not visible`);
-            assert.ok(await page.$('#operatorSelect'),`${name}: central operator selector missing`);
-            await page.evaluate(()=>{const lock=document.querySelector('#operatorLock');if(lock)lock.style.display='none';document.querySelector('main.app')?.removeAttribute('inert');});
-            const labels=await page.evaluate(()=>({
-              base:document.querySelector('#crossMatchExcelBtn')?.textContent.trim(),
-              compare:document.querySelector('#crossMatchTxtBtn')?.textContent.trim(),
-              folder:document.querySelector('#crossMatchFolderBtn')?.textContent.trim(),
-              marker:document.documentElement.dataset.txtSourceLabelsVersion,
-              initial:document.querySelector('#crossMatchStatus')?.textContent.trim(),
-            }));
-            assert.deepStrictEqual(labels,{base:'AquГ­ archivo de base',compare:'Archivo para comparar',folder:'Carpeta para comparar',marker:UI,initial:'Base: no cargada В· ComparaciГіn: sin archivos cargados'});
-            await page.evaluate(()=>{
-              MatchCrossSearch.ingestWorkbookModel('base.xlsx',[{name:'Datos',rows:[['SR','UA'],['M91504EQL152','000-01174-04427-010']]}]);
-              MatchCrossSearch.ingestTxtText('comparar.txt','000-01174-04427-010\tM91504EQL152');
-              const i=document.querySelector('#searchInput');i.value='M91504EQL152';
-              window.MatchSearchModes?.executeSearch?.();
-            });
-            const status=await page.$eval('#crossMatchStatus',el=>el.textContent);
-            assert.ok(status.includes('Base: base.xlsx'),`${name}: base status missing`);
-            assert.ok(status.includes('ComparaciГіn: 1 archivo'),`${name}: compare status missing`);
-            assert.ok(!status.includes('Excel maestro')&&!status.includes('TXT:'),`${name}: format labels leaked in status`);
-            const section=await page.$eval('.cross-match-section',el=>el.textContent);
-            assert.ok(section.includes('Base')&&section.includes('ComparaciГіn'),`${name}: source-role labels missing in results`);
-            assert.strictEqual(await page.$$eval('.cross-match-card.exact',els=>els.length),1,`${name}: strict exact match changed`);
-            const geom=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth,box:document.querySelector('.cross-match-source-box').getBoundingClientRect().width,panel:document.querySelector('.search-panel').getBoundingClientRect().width}));
-            assert.ok(geom.scroll<=geom.width+1,`${name}: horizontal overflow`);
-            assert.ok(geom.box>0&&geom.box<=geom.panel+1,`${name}: source box overflow`);
-            assert.ok(requests.some(u=>u.includes(`match-cross-search.js?v=20260901-searchindex1&ui=${UI}`)),`${name}: new cache key not requested`);
-            assert.ok(!requests.some(u=>/match-cross-search\.js\?v=20260901-searchindex1$/.test(u)),`${name}: old unversioned UI asset requested`);
-            await page.setOfflineMode(true);
-            await Promise.race([page.evaluate(()=>new Promise(r=>setTimeout(r,100))),new Promise((_,rej)=>setTimeout(()=>rej(new Error(`${name}: event loop blocked`)),2000))]);
-            assert.strictEqual(await page.$eval('#crossMatchExcelBtn',el=>el.textContent.trim()),'AquГ­ archivo de base');
-            await page.setOfflineMode(false);
-            assert.deepStrictEqual(errors,[],`${name}: console/page errors ${JSON.stringify(errors)}`);
-            console.log(`TXT_SOURCE_LABELS_${name.toUpperCase()}_OK login=visible labels=roles cors=simulated offline=responsive overflow=none`);
-            await page.close();
-          }
-          (async()=>{
-            const browser=await puppeteer.launch({headless:true,executablePath:process.env.CHROME_BIN,args:['--no-sandbox','--disable-setuid-sandbox']});
-            await run(browser,'desktop',1536,864);
-            await run(browser,'tablet',820,1180);
-            await run(browser,'mobile',390,844);
-            await browser.close();
-            console.log('TXT_SOURCE_LABELS_BROWSER_GATE_OK');
-          })().catch(e=>{console.error(e);process.exit(1)});
-          NODE
-          node /tmp/txt-labels-browser.cjs
+         ЫЫњЭ\]Y\Џ\™\]Z\™J›ШЩ\ЬЛЭЩ
 
-  verify-public-txt-source-labels:
-    if: github.ref == 'refs/heads/main'
-    needs: txt-source-labels
-    runs-on: ubuntu-latest
-    timeout-minutes: 6
-    steps:
-      - uses: actions/checkout@v4
-      - name: Verify public source-role labels after Pages deploy
-        shell: bash
-        env:
-          PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
-          UI_VERSION: 20260901-txtlabels1
-        run: |
-          set -uo pipefail
-          ok=0
-          for attempt in {1..36}; do
-            nonce="${GITHUB_SHA}-${attempt}-$(date +%s)"
-            code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?txtlabels=${nonce}" || true)
-            if [ "$code" = "200" ] \
-              && grep -F "data-txt-source-labels-version=\"${UI_VERSION}\"" /tmp/live.html >/dev/null \
-              && grep -F '>AquГ­ archivo de base</button>' /tmp/live.html >/dev/null \
-              && grep -F '>Archivo para comparar</button>' /tmp/live.html >/dev/null \
-              && grep -F '>Carpeta para comparar</button>' /tmp/live.html >/dev/null \
-              && grep -F "match-cross-search.js?v=20260901-searchindex1&ui=${UI_VERSION}" /tmp/live.html >/dev/null; then
-              js_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live-cross.js -w '%{http_code}' "${PUBLIC_URL}match-cross-search.js?v=20260901-searchindex1&ui=${UI_VERSION}&verify=${nonce}" || true)
-              if [ "$js_code" = "200" ] \
-                && grep -F 'Base: ${state.excelFile}' /tmp/live-cross.js >/dev/null \
-                && grep -F 'ComparaciГіn: ${state.txtSources.size}' /tmp/live-cross.js >/dev/null; then
-                ok=1
-                echo "TXT_SOURCE_LABELS_LIVE_OK url=${PUBLIC_URL} http=${code} version=${UI_VERSION}"
-                break
-              fi
-            fi
-            echo "Attempt ${attempt}: public TXT source labels not ready yet; retrying"
-            sleep 5
-          done
-          test "$ok" = "1"
+JЙЛЫ›ЩWЫ[Щ[\ЛЬ\]Y\‹XЫЬ™IКNВ€ЫЫњЭROIМЊЌЊLK]X™[МIОВ€ЫЫњЭЫЬњП^В€	ШXШЩ\ЬЛXЫЫќ›ЫX[ЭЛ[ЬљYЪ[‰О‰К‰Л€	ШXШЩ\ЬЛXЫЫќ›ЫX[ЭЛZXY\њЙО‰Ш\ZЩ^KЫЫќ[ќ]\K]]Ьљ^][Ы‹XЫY[ќZ[™›Л™Y™\‰Л€	ШXШЩ\ЬЛXЫЫќ›ЫX[ЭЛ[Y]ЩЙО‰ФФХФSУ”ЛСU	В€NВ€\Ю[Иќ[Э[Ы€ќ[Љњ›ЭЬЩ\‹[YKЪYZYЪ
+^В€ЫЫњЭYЩOX]ШZ]њ›ЭЬЩ\‹›™]ФYЩJ
+NВ€]ШZ]YЩKњЩ]љY]ЬЬќ
+ЭЪYZYЪ]љXЩTШШ[QXЭЬЋЊ_JNВ€ЫЫњЭ\њ›ЬњПVЧK™\]Y\ЭПVЧNВ€YЩK›ЫЉ	ЬYЩY\њ›Ь‰ЛOO™\њ›ЬњЛњ\Ъ
+Эљ[™КJJJNВ€YЩK›ЫЉ	ШЫЫњЫЫIЛOOћЪYЉKќ\J
+OOOIЩ\њ›Ь‰КY\њ›ЬњЛњ\Ъ
+Kќ^
+
+J_JNВ€]ШZ]YЩKњЩ]™\]Y\Э[ќ\Щ\[ЫЉќYJNВ€YЩK›ЫЉ	Ь™\]Y\Э	Л™\OOћВ€ЫЫњЭO\™\Kќ\›
+
+NИ™\]Y\ЭЛњ\Ъ
+JNВ€YЉЧљО—ЧШЩ—њЪY]њЧЫЫKЛќ\Э
+JJH™]\›€™\Kњ™\ЬЫ™
+ЬЭ]\ОЊЊЫЫќ[ќ\N‰Ш\XШ][Ы‹Ъ]\ШЬљ\	ЛXY\њОћЙШXШЩ\ЬЛXЫЫќ›ЫX[ЭЛ[ЬљYЪ[‰О‰К‰ЯK›ЩN‰ЭЪ[™ЭЛ–Ц]Ъ[™ЭЛ–ЦЯNЙЯJNВ€YЉKљ[ЫY\К	Ю]›^^ZЫ™Щ\љXЫZЪњЭ\X\ЩKЫЙКJ^В€YЉ™\K›Y]Щ
+
+OOOIУФSУ”ЙКH™]\›€™\Kњ™\ЬЫ™
+ЬЭ]\ОЊЊXY\њОЫЬњЛ›ЩN‰ЙЯJNВ€YЉKљ[ЫY\К	ШЫЬ™WЫ\ЭЫЬ\]ЬњЧЬЩ\ќљXЩIКJH™]\›€™\Kњ™\ЬЫ™
+ЬЭ]\ОЊЊЫЫќ[ќ\N‰Ш\XШ][Ы‹ЪњЫЫ‰ЛXY\њОЫЬњЛ›ЩN‰ЮИ›ЪИЋќќYK›ЫЭЭ\YЋќќYK›Ь\]ЬњИЋ–Ч_IЯJNВ€™]\›€™\Kњ™\ЬЫ™
+ЬЭ]\ОЊЊЫЫќ[ќ\N‰Ш\XШ][Ы‹ЪњЫЫ‰ЛXY\њОЫЬњЛ›ЩN‰ЮИ›ЪИЋќќY_IЯJNВ€B€™\KЫЫќ[ќYJ
+NВ€JNВ€]ШZ]YЩK™ЫЭК‹ЛМLЌЛЊЊЊNЌMОKПЭX™[ПIЫ[Y_XЭШZ][ќ[‰ЩЫXЫЫќ[ќШYY	Л[Y[Э]ЊЊJNВ€]ШZ]YЩKќШZ]›Ь‘ќ[Э[ЫЉ
+
+OOќЪ[™ЭЛ“X]ЪЬ›ЬЬФЩX\Ъ	‰™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ИЫЬ\]Ь“ШЪЙКKЭ[Y[Э]ЊLJNВ€ЫЫњЭЩЪ[ЏX]ШZ]YЩK‰][
+	ИЫЬ\]Ь“ШЪЙЛ[OЉЩ\Ь^N™Щ]ЫЫ\]YЭ[J[
+K™\Ь^Kљ\ЪX›N™[™Щ]›Э[™[™РЫY[ќ™XЭ
+
+KљZYЪЊ[™\ќ™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ЫXZ[‹\	КOЛљ\Р]љXќ]J	Ъ[™\ќ	К_JJNВ€\ЬЩ\ќ›ЪКЩЪ[‹™\Ь^HOOIЫ›Ы™IЙ‰›ЩЪ[‹ќљ\ЪX›K	Ы[Y_N€XШЩ\ЬИШЬ™Y[€›Эљ\ЪX›X
+NВ€\ЬЩ\ќ›ЪК]ШZ]YЩK‰
+	ИЫЬ\]Ь”Щ[XЭ	КK	Ы[Y_N€Щ[ќ[Ь\]Ь€Щ[XЭЬ€Z\ЬЪ[™Ш
+NВ€]ШZ]YЩK™][X]J
+
+OOћШЫЫњЭШЪПYШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ИЫЬ\]Ь“ШЪЙКNЪYЉШЪК[ШЪЛњЭ[K™\Ь^OIЫ›Ы™IОЩШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ЫXZ[‹\	КOЛњ™[[Э™P]љXќ]J	Ъ[™\ќ	КNЯJNВ€ЫЫњЭX™[ПX]ШZ]YЩK™][X]J
+
+OOЉВ€\ЩN™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ИШЬ›ЬЬУX]Ъ^Щ[ќ‰КOЛќ^ЫЫќ[ќќљ[J
+K€ЫЫ\\™N™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ИШЬ›ЬЬУX]Ъќ‰КOЛќ^ЫЫќ[ќќљ[J
+K€›Ы\Ћ™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ИШЬ›ЬЬУX]Ъ›Ы\ђќ‰КOЛќ^ЫЫќ[ќќљ[J
+K€X\љЩ\Ћ™ШЭ[Y[ќ™ШЭ[Y[ќ[[Y[ќ™]\Щ]ќЫЭ\ЩSX™[Х™\њЪ[Ы‹€[љ]X[™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ИШЬ›ЬЬУX]ЪЭ]\ЙКOЛќ^ЫЫќ[ќќљ[J
+K€JJNВ€\ЬЩ\ќ™Y\ЭљXЭ\]X[
+X™[ЛШ\ЩN‰Р\]pлH\Ъ]›ИH\ЩIЛЫЫ\\™N‰Р\Ъ]›И\HЫЫ\\\‰Л›Ы\Ћ‰РШ\њ]H\HЫЫ\\\‰ЛX\љЩ\Ћ•RK[љ]X[‰Р\ЩN€›ИШ\™ШYH0­ИЫЫ\\XЪpмЫЋ€Ъ[€\Ъ]›ЬИШ\™ШYЬИ0­И0г[™XЩN€[Ь™\ЙЯJNВ€]ШZ]YЩK™][X]J
+
+OOћВ€X]ЪЬ›ЬЬФЩX\Ъљ[™Щ\ЭЫЬљШ›ЫЪУ[Щ[
+	Ш\ЩKћЮ	ЛЮЫ[YN‰С]ЬЙЛ›ЭЬО–ЦЙФФ‰Л	ХPIЧKЙУNLMLTSML‰Л	МLLMНLЌЛLL	ЧW_WJNВ€X]ЪЬ›ЬЬФЩX\Ъљ[™Щ\Э^
+	ШЫЫ\\\‹ќ	Л	МLLMНLЌЛLLNLMLTSML‰КNВ€ЫЫњЭOYШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ИЬЩX\Ъ[њ]	КNЪKќ[YOIУNLMLTSML‰ОВ€Ъ[™ЭЛ“X]ЪЩX\Ъ[Щ\ПЛ™^XЭ]TЩX\ЪЛЉ
+NВ€JNВ€ЫЫњЭЭ]\ПX]ШZ]YЩK‰][
+	ИШЬ›ЬЬУX]ЪЭ]\ЙЛ[O™[ќ^ЫЫќ[ќ
+NВ€\ЬЩ\ќ›ЪКЭ]\Лљ[ЫY\К	Р\ЩN€\ЩKћЮ	КK	Ы[Y_N€\ЩHЭ]\ИZ\ЬЪ[™Ш
+NВ€\ЬЩ\ќ›ЪКЭ]\Лљ[ЫY\К	РЫЫ\\XЪpмЫЋ€H\Ъ]›ЙКK	Ы[Y_N€ЫЫ\\™HЭ]\ИZ\ЬЪ[™Ш
+NВ€\ЬЩ\ќ›ЪК\Э]\Лљ[ЫY\К	С^Щ[XY\Э›ЙКI‰€\Э]\Лљ[ЫY\К	Х‰КK	Ы[Y_N€›Ь›X]X™[ИXZЩY[€Э]\Ш
+NВ€ЫЫњЭЩXЭ[ЫЏX]ШZ]YЩK‰][
+	ЛЬ›ЬЬЛ[X]Ъ\ЩXЭ[Ы‰Л[O™[ќ^ЫЫќ[ќ
+NВ€\ЬЩ\ќ›ЪКЩXЭ[Ы‹љ[ЫY\К	Р\ЩIКI‰њЩXЭ[Ы‹љ[ЫY\К	РЫЫ\\XЪpмЫ‰КK	Ы[Y_N€ЫЭ\ЩK\›ЫHX™[ИZ\ЬЪ[™И[€™\Э[Ш
+NВ€\ЬЩ\ќњЭљXЭ\]X[
+]ШZ]YЩK‰	][
+	ЛЬ›ЬЬЛ[X]ЪXШ\™™^XЭ	Л[ПO™[Л›[™Э
+KK	Ы[Y_N€ЭљXЭ^XЭX]ЪЪ[™ЩY
+NВ€ЫЫњЭЩ[ЫOX]ШZ]YЩK™][X]J
+
+OOЉЬШЬ›Ы™ШЭ[Y[ќ™ШЭ[Y[ќ[[Y[ќњШЬ›ЫЪYЪYљ[›™\•ЪY›Ю™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ЛЬ›ЬЬЛ[X]Ъ\ЫЭ\ЩKX›Ю	КK™Щ]›Э[™[™РЫY[ќ™XЭ
+
+KќЪY[™[™ШЭ[Y[ќњ]Y\ћTЩ[XЭЬЉ	ЛњЩX\Ъ\[™[	КK™Щ]›Э[™[™РЫY[ќ™XЭ
+
+KќЪYJJNВ€\ЬЩ\ќ›ЪКЩ[ЫKњШЬ›ЫYЩ[ЫKќЪY
+МK	Ы[Y_N€Ьљ^›Ыќ[Э™\™›ЭШ
+NВ€\ЬЩ\ќ›ЪКЩ[ЫK›ЮЊ	‰™Щ[ЫK›ЮYЩ[ЫKњ[™[
+МK	Ы[Y_N€ЫЭ\ЩH›ЮЭ™\™›ЭШ
+NВ€\ЬЩ\ќ›ЪК™\]Y\ЭЛњЫЫYJOOќKљ[ЫY\КX]ЪXЬ›ЬЬЛ\ЩX\ЪљњПЭЏLЊЌЊLK\ЩX\Ъ[™^IќZOIХR_X
+JK	Ы[Y_N€™]ИШXЪHЩ^H›Э™\]Y\ЭY
+NВ€\ЬЩ\ќ›ЪК\™\]Y\ЭЛњЫЫYJOO‹ЫX]ЪXЬ›ЬЬЛ\ЩX\ЪљњЧЭЏLЊЌЊLK\ЩX\Ъ[™^IЛќ\Э
+JJK	Ы[Y_N€Ы[ќ™\њЪ[Ы™YRH\ЬЩ]™\]Y\ЭY
+NВ€]ШZ]YЩKњЩ]Щ™›[™S[ЩJќYJNВ€]ШZ]›ЫZ\ЩKњXЩJЬYЩK™][X]J
+
+OO›™]И›ЫZ\ЩJЏOњЩ][Y[Э]
+‹L
+JJK™]И›ЫZ\ЩJ
+Л™ZЉOOњЩ][Y[Э]
+
+
+OOњ™ZЉ™]И\њ›ЬЉ	Ы[Y_N€]™[ќЫЬ›ШЪЩY
+JKЊ
+JWJNВ€\ЬЩ\ќњЭљXЭ\]X[
+]ШZ]YЩK‰][
+	ИШЬ›ЬЬУX]Ъ^Щ[ќ‰Л[O™[ќ^ЫЫќ[ќќљ[J
+JK	Р\]pлH\Ъ]›ИH\ЩIКNВ€]ШZ]YЩKњЩ]Щ™›[™S[ЩJ[ЩJNВ€\ЬЩ\ќ™Y\ЭљXЭ\]X[
+\њ›ЬњЛЧK	Ы[Y_N€ЫЫњЫЫKЬYЩH\њ›ЬњИ	Т”УУ‹њЭљ[™ЪYћJ\њ›ЬњК_X
+NВ€ЫЫњЫЫK›ЩКФУХTђСWУP‘SЧЙЫ[YKќХ\\ђШ\ЩJ
+_WУТИЩЪ[Џ]љ\ЪX›HX™[П\›Ы\ИЫЬњП\Ъ[][]YЩ™›[™O\™\ЬЫњЪ]™HЭ™\™›ЭП[›Ы™X
+NВ€]ШZ]YЩKЫЬЩJ
+NВ€B€
+\Ю[К
+OOћВ€ЫЫњЭњ›ЭЬЩ\ЏX]ШZ]\]Y\‹›][Ъ
+ЪXY\ЬОќќYK^XЭ]X›T]њ›ШЩ\ЬЛ™[ќ‹ђТ“УQWР’S‹\™ЬО–ЙЛK[›Л\Ш[™›Ю	Л	ЛKY\ШX›K\Щ]ZY\Ш[™›Ю	Ч_JNВ€]ШZ]ќ[Љњ›ЭЬЩ\‹	Щ\ЪЭЬ	ЛMLН‹Ќ
+NВ€]ШZ]ќ[Љњ›ЭЬЩ\‹	ЭX›]	ЛЊLN
+NВ€]ШZ]ќ[Љњ›ЭЬЩ\‹	Ы[Шљ[IЛОL
+NВ€]ШZ]њ›ЭЬЩ\‹ЫЬЩJ
+NВ€ЫЫњЫЫK›ЩК	ХФУХTђСWУP‘SЧР”“ХФСT—СРUWУТЙКNВ€JJ
+KШ]Ъ
+OOћШЫЫњЫЫK™\њ›ЬЉJNЬ›ШЩ\ЬЛ™^]
+J_JNВ€“СB€›ЩHЭ\Э[X™[ЛXњ›ЭЬЩ\‹ЪњВ‚€™\љYћK\X›XЛ]\ЫЭ\ЩK[X™[О‚€YЋ€Ъ]X‹њ™Y€OH	Ь™YњЛЪXYЛЫXZ[‰В€™YYО€\ЫЭ\ЩK[X™[В€ќ[њЛ[ЫЋ€Xќ[ќK[]\Э€[Y[Э][Z[ќ]\О€‚€Э\О‚€H\Щ\О€XЭ[ЫњЛШЪXЪЫЭ]Ќ€H[YN€™\љYћHX›XИЫЭ\ЩK\›ЫHX™[ИYќ\€YЩ\И\ЮB€Ъ[€\Ъ€[ќЋ‚€P“PЧХT“€О‹ЛЪ›ЬШ[ќШ›ЮKYXќYЛ™Ъ]X‹љ[ЛЫX]ЪY\]Z\ЬЛВ€RWХ‘T”ТSУЋ€ЊЌЊLK]X™[МB€ќ[Ћ€€Щ]][И\YZ[€ЪПL€›Ь€][\[€МK‹ЊНџNИВ€›ЫЩOH‰СТUP—ФТ_KIШ][\KI
+]H
+Й\КH‚€ЫЩOI
+Э\›\ФИSK[X^][YHMHR	РШXЪKPЫЫќ›Ы€›ЛXШXЪIИR	ФYЫXN€›ЛXШXЪIИ[ИЭ\Ы]™Kљ[]И	Й^ЪШЫЩ_IИ‰ФP“PЧХT“OЭX™[ПIЫ›ЫЩ_H€ќYJB€Y€И‰ЫЩH€HЊЊ€H€	‰€Ь™\Q€™]K]\ЫЭ\ЩK[X™[Л]™\њЪ[ЫЏW‰ХRWХ‘T”ТSУџW€€Э\Ы]™Kљ[‹Щ]‹Ыќ[€	‰€Ь™\Q€	Пђ\]pлH\Ъ]›ИH\ЩOШќ]ЫЏ‰ИЭ\Ы]™Kљ[‹Щ]‹Ыќ[€	‰€Ь™\Q€	Пђ\Ъ]›И\HЫЫ\\\ЏШќ]ЫЏ‰ИЭ\Ы]™Kљ[‹Щ]‹Ыќ[€	‰€Ь™\Q€	ПђШ\њ]H\HЫЫ\\\ЏШќ]ЫЏ‰ИЭ\Ы]™Kљ[‹Щ]‹Ыќ[€	‰€Ь™\Q€›X]ЪXЬ›ЬЬЛ\ЩX\ЪљњПЭЏLЊЌЊLK\ЩX\Ъ[™^IќZOIХRWХ‘T”ТSУџH€Э\Ы]™Kљ[‹Щ]‹Ыќ[И[‚€њЧШЫЩOI
+Э\›\ФИSK[X^][YHMHR	РШXЪKPЫЫќ›Ы€›ЛXШXЪIИR	ФYЫXN€›ЛXШXЪIИ[ИЭ\Ы]™KXЬ›ЬЬЛљњИ]И	Й^ЪШЫЩ_IИ‰ФP“PЧХT“[X]ЪXЬ›ЬЬЛ\ЩX\ЪљњПЭЏLЊЌЊLK\ЩX\Ъ[™^IќZOIХRWХ‘T”ТSУџIќ™\љYћOIЫ›ЫЩ_H€ќYJB€Y€И‰њЧШЫЩH€HЊЊ€H€	‰€Ь™\Q€	Р\ЩN€	ЬЭ]K™^Щ[љ[_IИЭ\Ы]™KXЬ›ЬЬЛљњИ‹Щ]‹Ыќ[€	‰€Ь™\Q€	РЫЫ\\XЪpмЫЋ€	ЬЭ]KќЫЭ\Щ\ЛњЪ^™_IИЭ\Ы]™KXЬ›ЬЬЛљњИ‹Щ]‹Ыќ[И[‚€ЪПLB€XЪИ•ФУХTђСWУP‘SЧУU‘WУТИ\›IФP“PЧХT“HIШЫЩ_H™\њЪ[ЫЏIХRWХ‘T”ТSУџH‚€њ™XZВ€љB€љB€XЪИђ][\	Ш][\N€X›XИЫЭ\ЩHX™[И›Э™XYHY]И™]ћZ[™И‚€ЫY\B€Ы™B€\Э‰ЪИ€HЊH‚‚
