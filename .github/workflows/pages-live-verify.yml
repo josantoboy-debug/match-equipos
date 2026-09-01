@@ -169,7 +169,7 @@ jobs:
             [ "$new_session_code" = "200" ] || return 1
             grep -F "document.dispatchEvent(new CustomEvent('equipment:new-session-created'" /tmp/equipment-new-session.js >/dev/null || return 1
             grep -F "source:'equipment-register'" /tmp/equipment-new-session.js >/dev/null || return 1
-            grep -F 'La CANTIDAD ingresada será el límite real de la caja.' /tmp/equipment-new-session.js >/dev/null || return 1
+            grep -F 'El valor ingresado por el operador será el límite real de la caja.' /tmp/equipment-new-session.js >/dev/null || return 1
             ! grep -Eq 'MAX_PER_BOX|max="64"|máximo 64|1–64|1-64|slice\(0,[[:space:]]*2\)' /tmp/equipment-new-session.js || return 1
 
             echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=${code} build=${EXPECTED_BUILD} theme=${EXPECTED_THEME} tts=${EXPECTED_TTS_VERSION} registration=${EXPECTED_REGISTRATION_MODE_VERSION} search=${EXPECTED_GLOBAL_SEARCH_VERSION} capacity=${EXPECTED_CAPACITY_VERSION} quantity=${EXPECTED_QUANTITY_POLICY_VERSION}"
