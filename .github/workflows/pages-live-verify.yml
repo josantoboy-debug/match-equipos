@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - repair/pages-live-verify-v2-20260831
+      - repair/pages-live-quantity-verify-20260901
   workflow_dispatch:
 
 permissions:
@@ -28,6 +29,8 @@ jobs:
           tts_version=$(sed -n "s/.*TTS_ASSET_VERSION = '\([^']*\)'.*/\1/p" audit-fixes.js | head -1)
           registration_mode_version=$(sed -n 's/.*data-registration-mode-version="\([^"]*\)".*/\1/p' index.html | head -1)
           global_search_version=$(sed -n 's/.*data-global-search-version="\([^"]*\)".*/\1/p' index.html | head -1)
+          capacity_version=$(sed -n 's/.*data-capacity-version="\([^"]*\)".*/\1/p' index.html | head -1)
+          quantity_policy_version=$(sed -n 's/.*data-quantity-policy-version="\([^"]*\)".*/\1/p' index.html | head -1)
           audit_version=$(grep -o 'audit-fixes.js?v=[^"&]*' index.html | head -1 | cut -d= -f2)
           test -n "$build"
           test -n "$theme"
@@ -35,6 +38,8 @@ jobs:
           test -n "$tts_version"
           test -n "$registration_mode_version"
           test -n "$global_search_version"
+          test -n "$capacity_version"
+          test -n "$quantity_policy_version"
           test -n "$audit_version"
           echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "theme=$theme" >> "$GITHUB_OUTPUT"
@@ -42,6 +47,8 @@ jobs:
           echo "tts_version=$tts_version" >> "$GITHUB_OUTPUT"
           echo "registration_mode_version=$registration_mode_version" >> "$GITHUB_OUTPUT"
           echo "global_search_version=$global_search_version" >> "$GITHUB_OUTPUT"
+          echo "capacity_version=$capacity_version" >> "$GITHUB_OUTPUT"
+          echo "quantity_policy_version=$quantity_policy_version" >> "$GITHUB_OUTPUT"
           echo "audit_version=$audit_version" >> "$GITHUB_OUTPUT"
           echo "Expected build: $build"
           echo "Expected theme: $theme"
@@ -49,6 +56,8 @@ jobs:
           echo "Expected TTS policy: $tts_version"
           echo "Expected registration mode policy: $registration_mode_version"
           echo "Expected global search: $global_search_version"
+          echo "Expected capacity contract: $capacity_version"
+          echo "Expected quantity policy: $quantity_policy_version"
           echo "Expected audit loader: $audit_version"
 
       - name: Verify public GitHub Pages HTTP 200 and current runtime contracts
@@ -59,6 +68,8 @@ jobs:
           EXPECTED_TTS_VERSION: ${{ steps.markers.outputs.tts_version }}
           EXPECTED_REGISTRATION_MODE_VERSION: ${{ steps.markers.outputs.registration_mode_version }}
           EXPECTED_GLOBAL_SEARCH_VERSION: ${{ steps.markers.outputs.global_search_version }}
+          EXPECTED_CAPACITY_VERSION: ${{ steps.markers.outputs.capacity_version }}
+          EXPECTED_QUANTITY_POLICY_VERSION: ${{ steps.markers.outputs.quantity_policy_version }}
           EXPECTED_AUDIT_VERSION: ${{ steps.markers.outputs.audit_version }}
           PUBLIC_URL: https://josantoboy-debug.github.io/match-equipos/
         shell: bash
@@ -67,7 +78,7 @@ jobs:
 
           verify_attempt() {
             local nonce="$1"
-            local code theme_code admin_code audit_code tts_code critical_code registration_code new_session_code search_code
+            local code theme_code admin_code audit_code tts_code critical_code registration_code new_session_code search_code capacity_code
 
             code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/live.html -w '%{http_code}' "${PUBLIC_URL}?verify=${nonce}" || true)
             [ "$code" = "200" ] || return 1
@@ -75,11 +86,14 @@ jobs:
             grep -F "data-tts-policy-version=\"${EXPECTED_TTS_VERSION}\"" /tmp/live.html >/dev/null || return 1
             grep -F "data-registration-mode-version=\"${EXPECTED_REGISTRATION_MODE_VERSION}\"" /tmp/live.html >/dev/null || return 1
             grep -F "data-global-search-version=\"${EXPECTED_GLOBAL_SEARCH_VERSION}\"" /tmp/live.html >/dev/null || return 1
+            grep -F "data-capacity-version=\"${EXPECTED_CAPACITY_VERSION}\"" /tmp/live.html >/dev/null || return 1
+            grep -F "data-quantity-policy-version=\"${EXPECTED_QUANTITY_POLICY_VERSION}\"" /tmp/live.html >/dev/null || return 1
             grep -F "match-data-contract.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null || return 1
             grep -F "app.js?v=${EXPECTED_BUILD}" /tmp/live.html >/dev/null || return 1
             grep -F "search-mode.js?v=${EXPECTED_GLOBAL_SEARCH_VERSION}" /tmp/live.html >/dev/null || return 1
             grep -F "theme-control.css?v=${EXPECTED_THEME}" /tmp/live.html >/dev/null || return 1
-            grep -F "audit-fixes.js?v=${EXPECTED_AUDIT_VERSION}" /tmp/live.html >/dev/null || return 1
+            grep -F "equipment-capacity.js?v=${EXPECTED_QUANTITY_POLICY_VERSION}" /tmp/live.html >/dev/null || return 1
+            grep -F "audit-fixes.js?v=${EXPECTED_AUDIT_VERSION}&amp;quantity=${EXPECTED_QUANTITY_POLICY_VERSION}" /tmp/live.html >/dev/null || return 1
 
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}match-data-contract.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/contract.js || return 1
             curl -fsSL --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' "${PUBLIC_URL}app.js?v=${EXPECTED_BUILD}&verify=${nonce}" -o /tmp/app.js || return 1
@@ -109,15 +123,26 @@ jobs:
             grep -F "api('reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
             grep -F "api('emergency_reset_pin'" /tmp/admin-reset.js >/dev/null || return 1
 
-            audit_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/audit.js -w '%{http_code}' "${PUBLIC_URL}audit-fixes.js?v=${EXPECTED_AUDIT_VERSION}&verify=${nonce}" || true)
+            capacity_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/equipment-capacity.js -w '%{http_code}' "${PUBLIC_URL}equipment-capacity.js?v=${EXPECTED_QUANTITY_POLICY_VERSION}&verify=${nonce}" || true)
+            [ "$capacity_code" = "200" ] || return 1
+            grep -F "CAPACITY_VERSION = '${EXPECTED_CAPACITY_VERSION}'" /tmp/equipment-capacity.js >/dev/null || return 1
+            grep -F "input.removeAttribute('max')" /tmp/equipment-capacity.js >/dev/null || return 1
+            grep -F 'Number.isSafeInteger(value) && value >= 1' /tmp/equipment-capacity.js >/dev/null || return 1
+            grep -F 'maxPerBox: null' /tmp/equipment-capacity.js >/dev/null || return 1
+            ! grep -Eq 'MAX_PER_BOX|max="64"|máximo 64|1–64|1-64|slice\(0,[[:space:]]*2\)' /tmp/equipment-capacity.js || return 1
+
+            audit_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/audit.js -w '%{http_code}' "${PUBLIC_URL}audit-fixes.js?v=${EXPECTED_AUDIT_VERSION}&quantity=${EXPECTED_QUANTITY_POLICY_VERSION}&verify=${nonce}" || true)
             [ "$audit_code" = "200" ] || return 1
             grep -F "TTS_ASSET_VERSION = '${EXPECTED_TTS_VERSION}'" /tmp/audit.js >/dev/null || return 1
             grep -F "REGISTER_DEFAULT_MODE_VERSION = '${EXPECTED_REGISTRATION_MODE_VERSION}'" /tmp/audit.js >/dev/null || return 1
-            grep -F 'EQUIPMENT_NEW_SESSION_VERSION = REGISTER_DEFAULT_MODE_VERSION' /tmp/audit.js >/dev/null || return 1
+            grep -F "EQUIPMENT_NEW_SESSION_VERSION = '${EXPECTED_QUANTITY_POLICY_VERSION}'" /tmp/audit.js >/dev/null || return 1
+            grep -F "QUANTITY_POLICY_VERSION = '${EXPECTED_QUANTITY_POLICY_VERSION}'" /tmp/audit.js >/dev/null || return 1
             grep -F 'tts-control.js?v=${TTS_ASSET_VERSION}' /tmp/audit.js >/dev/null || return 1
             grep -F 'tts-critical-warnings.js?v=${TTS_ASSET_VERSION}' /tmp/audit.js >/dev/null || return 1
             grep -F 'equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}' /tmp/audit.js >/dev/null || return 1
             grep -F 'equipment-new-session.js?v=${EQUIPMENT_NEW_SESSION_VERSION}' /tmp/audit.js >/dev/null || return 1
+            grep -F 'equipment-import-context.js?v=${QUANTITY_POLICY_VERSION}' /tmp/audit.js >/dev/null || return 1
+            ! grep -Eq 'MAX_PER_BOX|max="64"|máximo 64|1–64|1-64|slice\(0,[[:space:]]*2\)' /tmp/audit.js || return 1
 
             tts_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/tts.js -w '%{http_code}' "${PUBLIC_URL}tts-control.js?v=${EXPECTED_TTS_VERSION}&verify=${nonce}" || true)
             [ "$tts_code" = "200" ] || return 1
@@ -140,12 +165,14 @@ jobs:
             grep -F "return normalizeName(operator?.name) === TARGET_OPERATOR ? 'automatic' : 'manual';" /tmp/registration-mode.js >/dev/null || return 1
             grep -F "document.addEventListener('equipment:new-session-created'" /tmp/registration-mode.js >/dev/null || return 1
 
-            new_session_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/equipment-new-session.js -w '%{http_code}' "${PUBLIC_URL}equipment-new-session.js?v=${EXPECTED_REGISTRATION_MODE_VERSION}&verify=${nonce}" || true)
+            new_session_code=$(curl -sS -L --max-time 15 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o /tmp/equipment-new-session.js -w '%{http_code}' "${PUBLIC_URL}equipment-new-session.js?v=${EXPECTED_QUANTITY_POLICY_VERSION}&verify=${nonce}" || true)
             [ "$new_session_code" = "200" ] || return 1
             grep -F "document.dispatchEvent(new CustomEvent('equipment:new-session-created'" /tmp/equipment-new-session.js >/dev/null || return 1
             grep -F "source:'equipment-register'" /tmp/equipment-new-session.js >/dev/null || return 1
+            grep -F 'El valor ingresado por el operador será el límite real de la caja.' /tmp/equipment-new-session.js >/dev/null || return 1
+            ! grep -Eq 'MAX_PER_BOX|max="64"|máximo 64|1–64|1-64|slice\(0,[[:space:]]*2\)' /tmp/equipment-new-session.js || return 1
 
-            echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=${code} build=${EXPECTED_BUILD} theme=${EXPECTED_THEME} admin=${EXPECTED_ADMIN_VERSION} tts=${EXPECTED_TTS_VERSION} registration=${EXPECTED_REGISTRATION_MODE_VERSION} search=${EXPECTED_GLOBAL_SEARCH_VERSION}"
+            echo "LIVE_PAGES_OK url=${PUBLIC_URL} http=${code} build=${EXPECTED_BUILD} theme=${EXPECTED_THEME} tts=${EXPECTED_TTS_VERSION} registration=${EXPECTED_REGISTRATION_MODE_VERSION} search=${EXPECTED_GLOBAL_SEARCH_VERSION} capacity=${EXPECTED_CAPACITY_VERSION} quantity=${EXPECTED_QUANTITY_POLICY_VERSION}"
             return 0
           }
 
@@ -156,7 +183,7 @@ jobs:
               ok=1
               break
             fi
-            echo "Attempt ${attempt}: public deployment not fully ready; retrying build=${EXPECTED_BUILD} tts=${EXPECTED_TTS_VERSION} registration=${EXPECTED_REGISTRATION_MODE_VERSION} search=${EXPECTED_GLOBAL_SEARCH_VERSION}"
+            echo "Attempt ${attempt}: public deployment not fully ready; retrying build=${EXPECTED_BUILD} quantity=${EXPECTED_QUANTITY_POLICY_VERSION}"
             sleep 5
           done
 
