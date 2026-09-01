@@ -47,6 +47,8 @@ jobs:
           import xml.etree.ElementTree as ET
           root=ET.parse('assets/unitcheck-mark.svg').getroot()
           assert root.attrib.get('viewBox')=='0 0 96 96'
+          assert root.attrib.get('width')=='96'
+          assert root.attrib.get('height')=='96'
           assert 'svg' in root.tag
           print('UNITCHECK_SVG_XML_OK')
           PY
@@ -103,14 +105,18 @@ jobs:
                 const a=document.querySelector('.top-actions'); if(a) a.innerHTML='<span style="min-width:155px">OPERADOR · Prueba</span><button>Cerrar sesión</button>';
                 const r=e=>{const x=e.getBoundingClientRect();return{left:x.left,right:x.right,top:x.top,bottom:x.bottom,width:x.width,height:x.height}};
                 const brand=document.querySelector('.unitcheck-brand'),nav=document.querySelector('.app-suite-nav'),actions=document.querySelector('.top-actions'),header=document.querySelector('.topbar'),mark=document.querySelector('.unitcheck-mark');
-                return {title:document.title,version:document.documentElement.dataset.brandVersion,brandVersion:brand?.dataset.brandVersion,src:mark?.getAttribute('src'),natural:[mark?.naturalWidth,mark?.naturalHeight],brandText:brand?.textContent.replace(/\s+/g,' ').trim(),navText:nav?.textContent.replace(/\s+/g,' ').trim(),header:r(header),brand:r(brand),nav:r(nav),actions:r(actions),scroll:document.documentElement.scrollWidth,width:innerWidth};
+                const word=brand?.querySelector('.unitcheck-brand-title strong'),sep=brand?.querySelector('.unitcheck-brand-separator'),module=brand?.querySelector('.unitcheck-brand-module');
+                const wordBox=r(word),sepBox=r(sep),moduleBox=r(module);
+                return {title:document.title,version:document.documentElement.dataset.brandVersion,brandVersion:brand?.dataset.brandVersion,brandLabel:brand?.getAttribute('aria-label'),brandParts:[word?.textContent.trim(),sep?.textContent.trim(),module?.textContent.trim()],brandGaps:[sepBox.left-wordBox.right,moduleBox.left-sepBox.right],src:mark?.getAttribute('src'),natural:[mark?.naturalWidth,mark?.naturalHeight],navText:nav?.textContent.replace(/\s+/g,' ').trim(),header:r(header),brand:r(brand),nav:r(nav),actions:r(actions),scroll:document.documentElement.scrollWidth,width:innerWidth};
               },BRAND);
               assert.strictEqual(s.title,'UNITCHECK · Match');
               assert.strictEqual(s.version,BRAND);
               assert.strictEqual(s.brandVersion,BRAND);
               assert.match(s.src,new RegExp(`assets/unitcheck-mark\\.svg\\?v=${BRAND}`));
               assert.deepStrictEqual(s.natural,[96,96]);
-              assert.strictEqual(s.brandText,'UNITCHECK · Match');
+              assert.strictEqual(s.brandLabel,'UNITCHECK · Match');
+              assert.deepStrictEqual(s.brandParts,['UNITCHECK','·','Match']);
+              assert.ok(s.brandGaps.every(g=>g>=2),`${name}: UNITCHECK title spacing missing ${s.brandGaps}`);
               assert.ok(s.navText.includes('UNITCHECK · Generador')&&s.navText.includes('UNITCHECK · Match'));
               assert.ok(s.scroll<=s.width+1,`${name}: horizontal overflow`);
               assert.ok(s.header.height<=maxHeader,`${name}: header too tall ${s.header.height}`);
@@ -119,7 +125,7 @@ jobs:
               assert.strictEqual(overlap(s.nav,s.actions),0,`${name}: nav/actions overlap`);
               await Promise.race([page.evaluate(()=>new Promise(r=>setTimeout(r,100))),new Promise((_,rej)=>setTimeout(()=>rej(new Error('event loop blocked')),2000))]);
               assert.deepStrictEqual(errors,[]);
-              console.log(`UNITCHECK_MATCH_${name.toUpperCase()}_OK header=${s.header.height.toFixed(1)}`);
+              console.log(`UNITCHECK_MATCH_${name.toUpperCase()}_OK header=${s.header.height.toFixed(1)} gaps=${s.brandGaps.join(',')}`);
               await page.close();
             }
             await browser.close();
@@ -148,7 +154,7 @@ jobs:
             if [ "$code" = '200' ] && grep -F "data-brand-version=\"${BRAND}\"" /tmp/live.html >/dev/null && grep -F '<title>UNITCHECK · Match</title>' /tmp/live.html >/dev/null && grep -F "assets/unitcheck-mark.svg?v=${BRAND}" /tmp/live.html >/dev/null && grep -F '>UNITCHECK · Generador</span>' /tmp/live.html >/dev/null && grep -F '>UNITCHECK · Match</span>' /tmp/live.html >/dev/null; then
               css_code=$(curl -sS -L --max-time 15 -o /tmp/brand.css -w '%{http_code}' "${PUBLIC_URL}unitcheck-brand.css?v=${BRAND}&verify=${nonce}" || true)
               svg_code=$(curl -sS -L --max-time 15 -o /tmp/mark.svg -w '%{http_code}' "${PUBLIC_URL}assets/unitcheck-mark.svg?v=${BRAND}&verify=${nonce}" || true)
-              if [ "$css_code" = '200' ] && [ "$svg_code" = '200' ] && grep -F 'Brand version: 20260831-suitebrand1' /tmp/brand.css >/dev/null && grep -F 'viewBox="0 0 96 96"' /tmp/mark.svg >/dev/null; then
+              if [ "$css_code" = '200' ] && [ "$svg_code" = '200' ] && grep -F 'Brand version: 20260831-suitebrand1' /tmp/brand.css >/dev/null && grep -F 'viewBox="0 0 96 96"' /tmp/mark.svg >/dev/null && grep -F 'width="96"' /tmp/mark.svg >/dev/null && grep -F 'height="96"' /tmp/mark.svg >/dev/null; then
                 echo "UNITCHECK_MATCH_PUBLIC_OK url=${PUBLIC_URL} http=${code} brand=${BRAND}"
                 ok=1; break
               fi
