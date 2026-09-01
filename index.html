@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1" data-general-search-version="20260901-generalsearch1" data-match-registration-mode-version="20260901-matchregmode1">
+<html lang="es" data-build="20260831-matchlocation1" data-nav-version="20260831-appnav1" data-light-theme-version="20260831-light2" data-tts-policy-version="20260831-critical4" data-registration-mode-version="20260831-josueauto1" data-global-search-version="20260831-autoclear3-crossmatch1" data-ui-sound-version="20260831-sound1" data-brand-version="20260831-unitcheck1" data-cross-match-version="20260901-searchindex1" data-general-search-version="20260901-generalsearch1" data-capacity-version="20260901-operator-limit1" data-quantity-policy-version="20260901-operator-limit3" data-match-registration-mode-version="20260901-matchregmode1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -14,6 +14,8 @@
   <meta name="brand-version" content="20260831-unitcheck1">
   <meta name="cross-match-version" content="20260901-searchindex1">
   <meta name="general-search-version" content="20260901-generalsearch1">
+  <meta name="capacity-version" content="20260901-operator-limit1">
+  <meta name="quantity-policy-version" content="20260901-operator-limit3">
   <meta name="match-registration-mode-version" content="20260901-matchregmode1">
   <title>UNITCHECK</title>
   <link rel="stylesheet" href="styles.css?v=f7caa1f">
@@ -185,11 +187,11 @@
     <div class="equipment-register-head">
       <div>
         <div class="equipment-register-titleline"><h2>Registrador de equipos por caja</h2><span class="mini-badge">Validación estricta</span></div>
-        <p>LOTE → CAJA → CANTIDAD → SERIAL → UA / UNIT ADDRESS. CANTIDAD define cuántos equipos tendrá la caja, con un máximo de 64.</p>
+        <p>LOTE → CAJA → CANTIDAD → SERIAL → UA / UNIT ADDRESS. CANTIDAD define cuántos equipos tendrá la caja; el operador define ese límite.</p>
       </div>
       <div class="equipment-file-actions">
         <input id="equipmentImportFile" type="file" accept=".xlsx,.xls,.csv,.tsv,.txt,.json,.accdb,application/msaccess,application/x-msaccess,application/vnd.ms-access" hidden>
-        <button id="equipmentImportBtn" class="secondary" type="button" title="ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y CANTIDAD desde la pantalla. Máximo 64 por caja.">Cargar registro</button>
+        <button id="equipmentImportBtn" class="secondary" type="button" title="ACCDB: toma Serial + UA del archivo y completa Proceso, Lote, Caja y CANTIDAD desde la pantalla.">Cargar registro</button>
         <select id="equipmentPrintMode" aria-label="Modo de impresión de caja">
           <option value="manual">Manual · según CANTIDAD</option>
           <option value="automatic">Automática · según CANTIDAD</option>
@@ -208,13 +210,13 @@
     <div class="equipment-entry-grid">
       <label><span>LOTE <small>Solo letras y números</small></span><input id="equipmentLot" class="equipment-code" autocomplete="off" placeholder="LOTE001" inputmode="text"></label>
       <label><span>CAJA <small>Secuencial</small></span><input id="equipmentBox" class="equipment-code" autocomplete="off" placeholder="1"></label>
-      <label class="equipment-quantity-field"><span>CANTIDAD <small>Límite de la caja · máximo 64</small></span><input id="equipmentQuantity" class="equipment-code" type="number" min="1" max="64" step="1" inputmode="numeric" autocomplete="off" placeholder="1–64" aria-label="Cantidad de equipos asignados a la caja"></label>
+      <label class="equipment-quantity-field"><span>CANTIDAD <small>Límite definido por el operador</small></span><input id="equipmentQuantity" class="equipment-code" type="number" min="1" step="1" inputmode="numeric" autocomplete="off" placeholder="Cantidad" aria-label="Cantidad de equipos asignados a la caja"></label>
       <label><span>SERIAL <small>M + 11 letras/números</small></span><input id="equipmentSerial" class="equipment-code" autocomplete="off" placeholder="M91616EQ4607" maxlength="12"></label>
       <label><span>UA / UNIT ADDRESS <small>0000 + 12 dígitos · 16 total</small></span><input id="equipmentUA" class="equipment-code" autocomplete="off" inputmode="numeric" maxlength="16" placeholder="0000000000000000"></label>
       <button id="equipmentAddBtn" class="primary equipment-add-btn" type="button">Agregar equipo</button>
     </div>
 
-    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD asignada (1–64). La CANTIDAD será el límite real de esa caja.</small></div></div>
+    <div id="equipmentValidationMessage" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD. La CANTIDAD ingresada será el límite real de esa caja.</small></div></div>
 
     <div class="equipment-register-summary">
       <div><span>Total registrados</span><strong id="equipmentTotalCount">0</strong></div>
@@ -275,18 +277,18 @@
 <script src="matches-export.js"></script>
 <script src="equipment-register.js?v=ua16-20260829"></script>
 <script src="equipment-process.js?v=bcc805e"></script>
-<script src="equipment-capacity.js?v=df7b530"></script>
-<script src="equipment-entry-flow.js?v=3d3b43f"></script>
-<script src="equipment-access-import.js?v=ua16-20260829"></script>
-<script src="equipment-auto-focus.js?v=ua16-20260829"></script>
+<script src="equipment-capacity.js?v=20260901-operator-limit3"></script>
+<script src="equipment-entry-flow.js?v=20260901-operator-limit3"></script>
+<script src="equipment-access-import.js?v=20260901-operator-limit3"></script>
+<script src="equipment-auto-focus.js?v=20260901-operator-limit3"></script>
 <script src="equipment-input-lock.js?v=ua16-20260829"></script>
 <script src="operator-session.js?v=20260830-stable1"></script>
 <script src="cloud-operator-bridge.js?v=20260830-stable1"></script>
 <script src="operator-lock.js?v=20260830-stable1"></script>
 <script src="operator-counter-fix.js"></script>
-<script src="equipment-box-print.js?v=process2line-20260829"></script>
+<script src="equipment-box-print.js?v=20260901-operator-limit3"></script>
 <script src="registry-export.js?v=564220c"></script>
-<script src="audit-fixes.js?v=20260831-josueauto1"></script>
+<script src="audit-fixes.js?v=20260831-josueauto1&amp;quantity=20260901-operator-limit3"></script>
 <script src="unified-export.js?v=870f693"></script>
 <script src="export-summary.js?v=1a4c24c"></script>
 <script src="voice-notifications.js?v=welcome-20260829"></script>

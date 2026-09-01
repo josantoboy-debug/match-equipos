@@ -2,7 +2,6 @@
   'use strict';
 
   const $ = selector => document.querySelector(selector);
-  const MAX_PER_BOX = 64;
 
   const normalizeLot = value => String(value ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   const normalizeUA = value => String(value ?? '').replace(/[-\s]/g, '');
@@ -60,12 +59,13 @@
       return window.EquipmentCapacity.validateQuantity({focus:true, announce:true});
     }
     const input = $('#equipmentQuantity');
-    const value = Number(String(input?.value || '').trim());
-    const valid = Number.isInteger(value) && value >= 1 && value <= MAX_PER_BOX;
+    const raw = String(input?.value || '').trim();
+    const value = Number(raw);
+    const valid = /^\d+$/.test(raw) && Number.isSafeInteger(value) && value >= 1;
     input?.classList.toggle('field-valid', valid);
-    input?.classList.toggle('field-invalid', !valid && !!String(input?.value || '').trim());
+    input?.classList.toggle('field-invalid', !valid && !!raw);
     if (!valid) {
-      setMessage('error', 'CANTIDAD inválida', `Asigna entre 1 y ${MAX_PER_BOX} equipos para esta caja.`);
+      setMessage('error', 'CANTIDAD inválida', 'Asigna un número entero de 1 o más equipos para esta caja.');
       input?.focus();
       input?.select?.();
     }
@@ -137,7 +137,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       if (!lotValid() || !boxValid()) return;
-      setMessage('ok', 'CAJA confirmada', `Ahora asigna la CANTIDAD de equipos de esta caja, entre 1 y ${MAX_PER_BOX}.`);
+      setMessage('ok', 'CAJA confirmada', 'Ahora asigna la CANTIDAD de equipos de esta caja. Ese número será el límite real.');
       focusField('#equipmentQuantity');
     }, true);
 

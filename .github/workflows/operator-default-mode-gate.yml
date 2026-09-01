@@ -30,6 +30,7 @@ jobs:
           grep -F 'search-mode.js?v=20260831-autoclear3-crossmatch1' index.html
           grep -F 'audit-fixes.js?v=20260831-josueauto1' index.html
           grep -F "REGISTER_DEFAULT_MODE_VERSION = '20260831-josueauto1'" audit-fixes.js
+          grep -F "EQUIPMENT_NEW_SESSION_VERSION = '20260901-operator-limit3'" audit-fixes.js
           grep -F 'equipment-register-default-mode.js?v=${REGISTER_DEFAULT_MODE_VERSION}' audit-fixes.js
           grep -F 'equipment-new-session.js?v=${EQUIPMENT_NEW_SESSION_VERSION}' audit-fixes.js
           grep -F "VERSION = '20260831-josueauto1'" equipment-register-default-mode.js
@@ -155,7 +156,7 @@ jobs:
                   operator:window.OperatorSession.getCurrentOperator()?.name,
                   mainInert:document.querySelector('main.app')?.hasAttribute('inert'),
                   moduleLoaded:[...document.scripts].some(s => (s.src||'').includes('equipment-register-default-mode.js?v=20260831-josueauto1')),
-                  newSessionVersioned:[...document.scripts].some(s => (s.src||'').includes('equipment-new-session.js?v=20260831-josueauto1')),
+                  newSessionVersioned:[...document.scripts].some(s => (s.src||'').includes('equipment-new-session.js?v=20260901-operator-limit3')),
                   searchVersioned:[...document.scripts].some(s => (s.src||'').includes('search-mode.js?v=20260831-autoclear3-crossmatch1')),
                   newSessionInstalled:newBtn?.dataset.safeNewSession === '1',
                   newSessionVisible:!!rect && rect.width>0 && rect.height>0

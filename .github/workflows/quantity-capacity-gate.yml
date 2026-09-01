@@ -1,0 +1,261 @@
+name: Operator-defined quantity capacity gate
+
+on:
+  push:
+    branches:
+      - repair/quantity-operator-limit-20260901
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quantity-capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate syntax references active quantity policy and cache markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          python3 - <<'PY'
+          import pathlib, re
+          html = pathlib.Path('index.html').read_text(encoding='utf-8')
+          refs = re.findall(r'(?:src|href)="([^"]+)"', html)
+          missing = []
+          for ref in refs:
+              if ref.startswith(('http://','https://','data:','#')):
+                  continue
+              path = ref.split('?',1)[0].split('#',1)[0]
+              if path and not pathlib.Path(path).exists():
+                  missing.append(path)
+          if missing:
+              raise SystemExit('Missing local refs: ' + ', '.join(sorted(set(missing))))
+          print('LOCAL_REFERENCES_OK')
+          PY
+
+          grep -F 'data-capacity-version="20260901-operator-limit1"' index.html
+          grep -F 'data-quantity-policy-version="20260901-operator-limit3"' index.html
+          grep -F 'data-match-registration-mode-version="20260901-matchregmode1"' index.html
+          grep -F 'equipment-capacity.js?v=20260901-operator-limit3' index.html
+          grep -F 'equipment-entry-flow.js?v=20260901-operator-limit3' index.html
+          grep -F 'equipment-access-import.js?v=20260901-operator-limit3' index.html
+          grep -F 'equipment-auto-focus.js?v=20260901-operator-limit3' index.html
+          grep -F 'equipment-box-print.js?v=20260901-operator-limit3' index.html
+          grep -F 'audit-fixes.js?v=20260831-josueauto1&amp;quantity=20260901-operator-limit3' index.html
+          grep -F "CAPACITY_VERSION = '20260901-operator-limit1'" equipment-capacity.js
+          grep -F "QUANTITY_POLICY_VERSION = '20260901-operator-limit3'" audit-fixes.js
+          grep -F "EQUIPMENT_NEW_SESSION_VERSION = '20260901-operator-limit3'" audit-fixes.js
+          grep -F 'equipment-new-session.js?v=${EQUIPMENT_NEW_SESSION_VERSION}' audit-fixes.js
+          grep -F 'equipment-import-context.js?v=${QUANTITY_POLICY_VERSION}' audit-fixes.js
+
+          active_quantity_files=(
+            index.html
+            audit-fixes.js
+            equipment-capacity.js
+            equipment-entry-flow.js
+            equipment-access-import.js
+            equipment-auto-focus.js
+            equipment-import-context.js
+            equipment-box-print.js
+            equipment-new-session.js
+          )
+          if grep -En 'MAX_PER_BOX|max="64"|máximo 64|1–64|1-64|legacy64|slice\(0,[[:space:]]*2\)' "${active_quantity_files[@]}"; then
+            echo 'Active fixed-64 quantity policy detected' >&2
+            exit 1
+          fi
+
+          if grep -En 'equipment-auto-quantity\.js' index.html audit-fixes.js; then
+            echo 'Legacy equipment-auto-quantity.js is still loaded' >&2
+            exit 1
+          fi
+
+          grep -F 'audit-fixes.js?v=20260831-josueauto1' index.html
+          grep -F 'app.js?v=20260831-matchlocation1&amp;matchreg=20260901-matchregmode1' index.html
+          echo 'QUANTITY_STATIC_OK active-policy-only'
+
+      - name: Unit test operator-defined capacity contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const assert = require('assert');
+          const input = {value:'', classList:{remove(){},add(){},toggle(){}}};
+          global.document = {
+            readyState:'loading',
+            querySelector(selector){ return selector === '#equipmentQuantity' ? input : null; },
+            addEventListener(){}
+          };
+          global.window = {};
+          require('./equipment-capacity.js');
+          const api = window.EquipmentCapacity;
+          assert(api, 'EquipmentCapacity no se publicó');
+          assert.strictEqual(api.version, '20260901-operator-limit1');
+          assert.strictEqual(api.maxPerBox, null);
+          for (const value of [1,64,65,100,250,1000]) {
+            input.value = String(value);
+            assert.strictEqual(api.getAssignedQuantity(), value, `CANTIDAD ${value} debe ser válida`);
+          }
+          for (const value of ['0','-1','1.5','abc','']) {
+            input.value = value;
+            assert.strictEqual(api.getAssignedQuantity(), 0, `CANTIDAD ${value} debe ser inválida`);
+          }
+          console.log('OPERATOR_QUANTITY_UNIT_OK values=1,64,65,100,250,1000');
+          NODE
+
+      - name: Install browser test dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Start local application
+        run: |
+          python3 -m http.server 4178 --bind 127.0.0.1 > /tmp/quantity-http.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4178/ >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/quantity-http.log
+          exit 1
+
+      - name: Desktop tablet mobile restored-session stale-cache and CORS smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/quantity-smoke.cjs <<'NODE'
+          const assert = require('assert');
+          const puppeteer = require(process.cwd() + '/node_modules/puppeteer-core');
+          const OPERATOR = {id:'00000000-0000-4000-8000-000000000333',name:'Operador Prueba',role:'operator',active:true};
+          const viewports = [
+            {name:'desktop',width:1366,height:768},
+            {name:'tablet',width:768,height:1024},
+            {name:'mobile',width:390,height:844}
+          ];
+
+          async function seedSession(page) {
+            await page.evaluateOnNewDocument(operator => {
+              localStorage.setItem('matchEquipos.operatorAccess.v1', JSON.stringify({version:1,operators:[{
+                id:operator.id,name:operator.name,role:operator.role,active:true,cloud:true,pinHash:'fictitious-test-hash'
+              }]}));
+              sessionStorage.setItem('matchEquipos.activeOperator.v1', operator.id);
+              sessionStorage.setItem('matchEquipos.cloudOperatorSession.v1', JSON.stringify({
+                operator:{id:operator.id,name:operator.name,role:operator.role},offline:true,savedAt:new Date().toISOString()
+              }));
+            }, OPERATOR);
+          }
+
+          async function intercept(page) {
+            await page.setRequestInterception(true);
+            page.on('request', request => {
+              const url = request.url();
+              if (url.includes('/rpc/core_list_operators_service')) {
+                request.respond({status:200,contentType:'application/json',headers:{
+                  'access-control-allow-origin':'*',
+                  'access-control-allow-headers':'apikey,content-type',
+                  'access-control-allow-methods':'POST,OPTIONS'
+                },body:JSON.stringify({ok:true,bootstrapped:true,operators:[OPERATOR]})});
+              } else if (/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)) {
+                request.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+              } else if (url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')) {
+                request.respond({status:400,contentType:'application/json',headers:{
+                  'access-control-allow-origin':'*',
+                  'access-control-allow-headers':'apikey,content-type'
+                },body:'{"ok":false}'});
+              } else request.continue();
+            });
+          }
+
+          (async () => {
+            const browser = await puppeteer.launch({
+              headless:true,
+              executablePath:process.env.CHROME_BIN || '/usr/bin/google-chrome',
+              args:['--no-sandbox','--disable-setuid-sandbox']
+            });
+            for (const viewport of viewports) {
+              const page = await browser.newPage();
+              await page.setViewport({width:viewport.width,height:viewport.height,deviceScaleFactor:1});
+              const errors = [];
+              page.on('pageerror', error => errors.push(String(error)));
+              page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+              await seedSession(page);
+              await intercept(page);
+              await page.goto(`http://127.0.0.1:4178/?quantity=${viewport.name}`,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(() =>
+                window.EquipmentCapacity?.version === '20260901-operator-limit1' &&
+                window.MatchEquiposAuditFixes?.quantityPolicyVersion === '20260901-operator-limit3' &&
+                window.OperatorSession?.getCurrentOperator?.()?.name === 'Operador Prueba',
+                {timeout:7000}
+              );
+
+              const state = await page.evaluate(() => {
+                const input = document.querySelector('#equipmentQuantity');
+                const matchMode = document.querySelector('#matchRegisterModeBtn');
+                const rect = input?.getBoundingClientRect();
+                const matchRect = matchMode?.getBoundingClientRect();
+                input.value = '100';
+                input.dispatchEvent(new Event('input',{bubbles:true}));
+                return {
+                  visible:!!rect && rect.width>0 && rect.height>0,
+                  matchModeVisible:!!matchRect && matchRect.width>0 && matchRect.height>0,
+                  min:input?.getAttribute('min'),
+                  max:input?.getAttribute('max'),
+                  value:input?.value,
+                  cap:window.EquipmentCapacity.getAssignedQuantity(),
+                  version:window.EquipmentCapacity.version,
+                  htmlVersion:document.documentElement.dataset.capacityVersion,
+                  policyVersion:document.documentElement.dataset.quantityPolicyVersion,
+                  auditPolicy:window.MatchEquiposAuditFixes?.quantityPolicyVersion,
+                  matchVersion:document.documentElement.dataset.matchRegistrationModeVersion,
+                  mainInert:document.querySelector('main.app')?.hasAttribute('inert'),
+                  newCapacity:[...document.scripts].some(s => (s.src||'').includes('equipment-capacity.js?v=20260901-operator-limit3')),
+                  oldCapacity:[...document.scripts].some(s => (s.src||'').includes('equipment-capacity.js?v=df7b530')),
+                  legacyAutoQuantity:[...document.scripts].some(s => (s.src||'').includes('equipment-auto-quantity.js')),
+                  oldQuantityModules:[...document.scripts]
+                    .filter(s => /equipment-(?:entry-flow|access-import|auto-focus|box-print)\.js/.test(s.src||''))
+                    .some(s => !(s.src||'').includes('v=20260901-operator-limit3')),
+                  auditCache:[...document.scripts].some(s =>
+                    (s.src||'').includes('audit-fixes.js?v=20260831-josueauto1&quantity=20260901-operator-limit3')
+                  )
+                };
+              });
+              assert.deepStrictEqual(state,{
+                visible:true,matchModeVisible:true,min:'1',max:null,value:'100',cap:100,
+                version:'20260901-operator-limit1',htmlVersion:'20260901-operator-limit1',
+                policyVersion:'20260901-operator-limit3',auditPolicy:'20260901-operator-limit3',
+                matchVersion:'20260901-matchregmode1',mainInert:false,newCapacity:true,oldCapacity:false,
+                legacyAutoQuantity:false,oldQuantityModules:false,auditCache:true
+              });
+
+              if (viewport.name === 'desktop') {
+                const newSession = await page.evaluate(() => {
+                  const input = document.querySelector('#equipmentQuantity');
+                  input.value = '250';
+                  input.dispatchEvent(new Event('input',{bubbles:true}));
+                  window.confirm = () => true;
+                  window.EquipmentNewSession.start();
+                  const message = document.querySelector('#equipmentValidationMessage')?.textContent || '';
+                  return {
+                    quantity:input.value,
+                    cap:window.EquipmentCapacity.getAssignedQuantity(),
+                    hasFixed64:/máximo\s*64|1[–-]64/i.test(message)
+                  };
+                });
+                assert.deepStrictEqual(newSession,{quantity:'',cap:0,hasFixed64:false});
+              }
+
+              await Promise.race([
+                page.evaluate(() => new Promise(resolve => setTimeout(() => resolve('responsive'),100))),
+                new Promise((_,reject) => setTimeout(() => reject(new Error('Page event loop blocked')),2000))
+              ]);
+              assert.deepStrictEqual(errors,[]);
+              await page.close();
+            }
+            await browser.close();
+            console.log('OPERATOR_QUANTITY_BROWSER_OK desktop=ok tablet=ok mobile=ok cache=ok cors=ok offline=ok new-session=ok eventloop=ok');
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
+          node /tmp/quantity-smoke.cjs

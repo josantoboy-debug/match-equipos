@@ -2,11 +2,11 @@
   'use strict';
 
   const $ = selector => document.querySelector(selector);
-  const MAX_PER_BOX = 64;
   const THEME_ASSET_VERSION = '20260831-light2';
   const TTS_ASSET_VERSION = '20260831-critical4';
   const REGISTER_DEFAULT_MODE_VERSION = '20260831-josueauto1';
-  const EQUIPMENT_NEW_SESSION_VERSION = REGISTER_DEFAULT_MODE_VERSION;
+  const EQUIPMENT_NEW_SESSION_VERSION = '20260901-operator-limit3';
+  const QUANTITY_POLICY_VERSION = '20260901-operator-limit3';
 
   if (!document.querySelector('#hiddenKpiStyle')) {
     const style = document.createElement('style');
@@ -94,28 +94,15 @@
     }, true);
   }
 
+  // EquipmentCapacity es la única fuente de verdad de CANTIDAD.
+  // Este hook heredado solo limpia atributos antiguos y solicita refresco;
+  // no instala listeners ni vuelve a validar el mismo campo.
   function guardQuantity() {
     const input = $('#equipmentQuantity');
     if (!input) return;
-    input.type = 'number';
-    input.min = '1';
-    input.max = String(MAX_PER_BOX);
-    input.step = '1';
-    input.inputMode = 'numeric';
-    input.removeAttribute('aria-hidden');
-    input.removeAttribute('tabindex');
+    input.removeAttribute('max');
     input.removeAttribute('value');
-
-    if (input.dataset.auditGuarded === '1') return;
-    input.dataset.auditGuarded = '1';
-    input.addEventListener('input', event => {
-      const raw = String(event.target.value || '').replace(/\D/g, '').slice(0, 2);
-      if (event.target.value !== raw) event.target.value = raw;
-      const value = Number(raw);
-      const valid = Number.isInteger(value) && value >= 1 && value <= MAX_PER_BOX;
-      event.target.classList.toggle('field-valid', valid);
-      event.target.classList.toggle('field-invalid', !!raw && !valid);
-    }, true);
+    window.EquipmentCapacity?.refresh?.();
   }
 
   function loadExportSummary() {
@@ -160,7 +147,7 @@
   function loadEquipmentImportContext() {
     if (window.EquipmentImportContext || document.querySelector('script[data-equipment-import-context]')) return;
     const script = document.createElement('script');
-    script.src = 'equipment-import-context.js?v=legacy64-20260829b';
+    script.src = `equipment-import-context.js?v=${QUANTITY_POLICY_VERSION}`;
     script.dataset.equipmentImportContext = '1';
     script.async = false;
     script.onerror = () => console.error('[match-equipos] No se pudo cargar equipment-import-context.js');
@@ -228,6 +215,7 @@
     loadEquipmentNewSession,
     loadEquipmentProcessHistory,
     loadEquipmentImportContext,
-    guardQuantity
+    guardQuantity,
+    quantityPolicyVersion: QUANTITY_POLICY_VERSION
   };
 })();

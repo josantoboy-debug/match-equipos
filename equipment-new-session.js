@@ -3,7 +3,6 @@
 
   const $ = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
-  const MAX_PER_BOX = 64;
   const HISTORY_PREFIX = 'matchEquipos.sessionRecovery.v1';
   const MAX_HISTORY = 20;
 
@@ -90,7 +89,7 @@
     const message=$('#equipmentValidationMessage');
     if (message) {
       message.className='equipment-validation neutral';
-      message.innerHTML=`<span class="equipment-validation-icon">✓</span><div><strong>Nueva sesión lista</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD asignada. Máximo ${MAX_PER_BOX} equipos.</small></div>`;
+      message.innerHTML=`<span class="equipment-validation-icon">✓</span><div><strong>Nueva sesión lista</strong><small>Define Asignación / Proceso, Lote, Caja y CANTIDAD. El valor ingresado por el operador será el límite real de la caja.</small></div>`;
     }
     setTimeout(() => ($('#equipmentProcess') || $('#equipmentLot'))?.focus(), 0);
   }
