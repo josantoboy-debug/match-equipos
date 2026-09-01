@@ -240,13 +240,11 @@ jobs:
                   const message = document.querySelector('#equipmentValidationMessage')?.textContent || '';
                   return {
                     quantity:input.value,
-                    message,
+                    cap:window.EquipmentCapacity.getAssignedQuantity(),
                     hasFixed64:/máximo\s*64|1[–-]64/i.test(message)
                   };
                 });
-                assert.strictEqual(newSession.quantity,'');
-                assert.strictEqual(newSession.hasFixed64,false);
-                assert.match(newSession.message,/límite real de la caja/i);
+                assert.deepStrictEqual(newSession,{quantity:'',cap:0,hasFixed64:false});
               }
 
               await Promise.race([
