@@ -1,0 +1,110 @@
+name: Repository integrity gate
+
+on:
+  push:
+    branches:
+      - repair/publish-integrity-20260902
+    paths:
+      - .gitattributes
+      - scripts/**
+      - docs/production-publish-protocol.md
+      - .github/workflows/**
+  pull_request:
+    branches: [main]
+    paths:
+      - .gitattributes
+      - scripts/**
+      - docs/production-publish-protocol.md
+      - .github/workflows/**
+
+permissions:
+  contents: read
+
+jobs:
+  repository-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed files
+        id: changed
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$PUSH_BEFORE_SHA"
+          fi
+          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
+            base="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          git diff --name-only "$base" "$GITHUB_SHA" > /tmp/changed-files.txt
+          echo "Changed files:"
+          cat /tmp/changed-files.txt
+          {
+            echo 'paths<<EOF'
+            cat /tmp/changed-files.txt
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+      - name: UTF-8 and mojibake guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t changed < /tmp/changed-files.txt
+          python3 scripts/verify_text_integrity.py "${changed[@]}"
+
+      - name: JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r file; do
+            case "$file" in
+              *.js|*.cjs|*.mjs)
+                [ -f "$file" ] && node --check "$file"
+                ;;
+            esac
+          done < /tmp/changed-files.txt
+
+      - name: Lint changed GitHub Actions workflows
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          set -euo pipefail
+          mapfile -t workflows < <(
+            grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt || true
+          )
+          if [ "${#workflows[@]}" -eq 0 ]; then
+            echo "No changed workflows to lint"
+            exit 0
+          fi
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLo "$archive"             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" actionlint
+          ./actionlint "${workflows[@]}"
+
+      - name: Read-only gate invariant
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/workflows/repository-integrity-gate.yml')
+          text=p.read_text(encoding='utf-8')
+          assert 'permissions:\n  contents: read' in text
+          forbidden=('git '+'push', 'git '+'commit', 'update'+'-ref', 'gh pr '+'merge')
+          for marker in forbidden:
+              assert marker not in text, marker
+          print('REPOSITORY_INTEGRITY_GATE_READ_ONLY_OK')
+          PY
