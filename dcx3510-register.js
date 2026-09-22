@@ -16,7 +16,7 @@
   const normalizeCardSn=v=>upper(v).replace(/[^A-Z0-9]/g,'').slice(0,24);
   const normalizeMcardUa=v=>digits(v).slice(0,16);
   const validMac=v=>/^[0-9A-F]{12}$/.test(normalizeMac(v));
-  const validHost=v=>/^M[A-Z0-9]{10,15}$/.test(normalizeHost(v));
+  const validHost=v=>/^M[A-Z0-9]{11}$/.test(normalizeHost(v));
   const validCardSn=v=>/^[A-Z0-9]{8,24}$/.test(normalizeCardSn(v));
   const validMcardUa=v=>/^0000\d{12}$/.test(normalizeMcardUa(v));
 
