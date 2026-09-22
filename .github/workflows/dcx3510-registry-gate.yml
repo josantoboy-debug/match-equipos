@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m http.server 4182 --bind 127.0.0.1 >/tmp/dcx-http.log 2>&1 &
-          for i in {1..20}; do curl -fsS http://127.0.0.1:4182/ >/dev/null && break; sleep 1; done
+          for _ in {1..20}; do curl -fsS http://127.0.0.1:4182/ >/dev/null && break; sleep 1; done
           cat >/tmp/dcx-smoke.cjs <<'NODE'
           const assert=require('assert');
           const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
