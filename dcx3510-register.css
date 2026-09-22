@@ -1,0 +1,30 @@
+.dcx3510-panel{margin-top:16px;overflow:hidden}
+.dcx3510-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:17px 18px;border-bottom:1px solid var(--line,#263247);background:linear-gradient(180deg,rgba(22,33,49,.72),rgba(13,20,31,.35))}
+.dcx3510-head h2{margin:0}.dcx3510-head p{margin:5px 0 0;color:var(--muted,#94a3b8);font-size:11px}
+.dcx3510-titleline{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.dcx3510-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.dcx3510-base-status{display:flex;align-items:center;gap:8px;margin:12px 18px 0;padding:9px 11px;border:1px solid var(--line,#263247);border-radius:9px;background:rgba(15,23,35,.5);font-size:10px;color:var(--muted,#94a3b8)}
+.dcx3510-base-status .file-index-dot.indexed{background:#22c55e}
+.dcx3510-context{display:grid;grid-template-columns:minmax(140px,.6fr) minmax(140px,.6fr) minmax(180px,1fr);gap:12px;padding:14px 18px 0}
+.dcx3510-context label,.dcx3510-entry-grid label{display:grid;gap:6px;color:#aebdd0;font-size:9px;font-weight:800;letter-spacing:.03em}
+.dcx3510-context label small,.dcx3510-entry-grid label small{color:var(--muted,#7890aa);font-weight:600}
+.dcx3510-box-indicator{display:grid;align-content:center;gap:2px;border:1px solid var(--line,#263247);border-radius:10px;padding:8px 12px;background:rgba(15,23,35,.55)}
+.dcx3510-box-indicator span{font-size:8px;color:var(--muted,#7890aa);font-weight:800}.dcx3510-box-indicator strong{font-size:18px}.dcx3510-box-indicator small{font-size:8px;color:var(--muted,#7890aa)}
+.dcx3510-entry-grid{display:grid;grid-template-columns:repeat(5,minmax(150px,1fr)) auto;gap:10px;align-items:end;padding:14px 18px}
+.dcx3510-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:0 18px 14px}
+.dcx3510-summary>div{display:grid;gap:3px;border:1px solid var(--line,#263247);border-radius:9px;padding:9px 11px;background:rgba(15,23,35,.42)}
+.dcx3510-summary span{font-size:8px;color:var(--muted,#7890aa);font-weight:800}.dcx3510-summary strong{font-size:18px}
+.dcx3510-table-wrap{margin-top:0}.dcx3510-table .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap}
+.dcx-status{display:inline-flex;align-items:center;min-height:22px;padding:2px 7px;border-radius:999px;font-size:8px;font-weight:900;white-space:nowrap}
+.dcx-found{background:rgba(34,197,94,.14);color:#69e491;border:1px solid rgba(34,197,94,.28)}
+.dcx-missing{background:rgba(245,158,11,.14);color:#f7c45b;border:1px solid rgba(245,158,11,.3)}
+.dcx-pending{background:rgba(100,116,139,.14);color:#a8b4c4;border:1px solid rgba(100,116,139,.3)}
+html[data-theme="light"] .dcx3510-head{background:#f7f9fc}
+html[data-theme="light"] .dcx3510-base-status,html[data-theme="light"] .dcx3510-box-indicator,html[data-theme="light"] .dcx3510-summary>div{background:#f8fafc;border-color:#d7e0ea}
+html[data-theme="light"] .dcx3510-context label,html[data-theme="light"] .dcx3510-entry-grid label{color:#475569}
+html[data-theme="light"] .dcx-found{color:#166534;background:#ecfdf3;border-color:#86d9a7}
+html[data-theme="light"] .dcx-missing{color:#92400e;background:#fffbeb;border-color:#e7ca65}
+html[data-theme="light"] .dcx-pending{color:#475569;background:#f1f5f9;border-color:#cbd5e1}
+@media(max-width:1250px){.dcx3510-entry-grid{grid-template-columns:repeat(3,minmax(170px,1fr))}.dcx3510-summary{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:800px){.dcx3510-head{flex-direction:column}.dcx3510-actions{width:100%}.dcx3510-actions button{flex:1 1 180px}.dcx3510-context{grid-template-columns:1fr 1fr}.dcx3510-box-indicator{grid-column:1/-1}.dcx3510-entry-grid{grid-template-columns:1fr 1fr}.dcx3510-entry-grid .equipment-add-btn{grid-column:1/-1}.dcx3510-summary{grid-template-columns:1fr 1fr}.dcx3510-summary>div:last-child{grid-column:1/-1}}
+@media(max-width:520px){.dcx3510-context,.dcx3510-entry-grid,.dcx3510-summary{grid-template-columns:1fr}.dcx3510-box-indicator,.dcx3510-entry-grid .equipment-add-btn,.dcx3510-summary>div:last-child{grid-column:auto}.dcx3510-head,.dcx3510-context,.dcx3510-entry-grid,.dcx3510-summary{padding-left:12px;padding-right:12px}.dcx3510-base-status{margin-left:12px;margin-right:12px}}
+@media print{#dcx3510Panel{display:none!important}}

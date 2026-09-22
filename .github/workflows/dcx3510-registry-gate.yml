@@ -1,0 +1,108 @@
+name: DCX3510 registry gate
+
+on:
+  push:
+    branches: [repair/dcx3510-registry-20260922]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dcx3510:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Static and unit validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.js; do node --check "$file"; done
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('index.html').read_text(encoding='utf-8')
+          refs=re.findall(r'(?:src|href)="([^"]+)"',html)
+          missing=[]
+          for ref in refs:
+              if ref.startswith(('http://','https://','data:','#')): continue
+              path=ref.split('?',1)[0].split('#',1)[0]
+              if path and not Path(path).exists(): missing.append(path)
+          assert not missing, missing
+          for marker in ('data-dcx3510-version="20260922-dcx1"','dcx3510-register.css?v=20260922-dcx1','dcx3510-register.js?v=20260922-dcx1'):
+              assert marker in html, marker
+          print('DCX3510_REFS_OK')
+          PY
+          node <<'NODE'
+          const assert=require('assert');
+          require('./dcx3510-register.js');
+          const u=global.DCX3510Utils;
+          assert.strictEqual(u.BOX_CAPACITY,8);
+          assert.deepStrictEqual(u.ASSIGNMENTS,['08','98','79','99']);
+          assert.strictEqual(u.validHost('M11334TC7794'),true);
+          assert.strictEqual(u.validHost('M11334TC779'),false);
+          assert.strictEqual(u.validMcardUa('0000086989871111'),true);
+          const parsed=u.parseBaseRows([
+            ['Fecha','Procedencia','N','Modelo','Serial'],
+            ['21-09-2026','Puerto Rico 08','1','DCX3510-M','M11334TC7794']
+          ],'08');
+          assert.strictEqual(parsed.rows[0].serial,'M11334TC7794');
+          assert.strictEqual(parsed.rows[0].assignment,'08');
+          const seven=Array.from({length:7},(_,i)=>({assignment:'08',box:'01',boxPosition:i+1}));
+          assert.deepStrictEqual(u.resolvePlacement(seven,'08','01'),{box:'01',position:8,advanced:false});
+          const eight=[...seven,{assignment:'08',box:'01',boxPosition:8}];
+          assert.deepStrictEqual(u.resolvePlacement(eight,'08','01'),{box:'02',position:1,advanced:true});
+          console.log('DCX3510_UNIT_OK');
+          NODE
+
+      - name: Install browser dependency
+        run: npm install --no-save --no-package-lock puppeteer-core@24.16.0
+
+      - name: Browser responsive smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 4182 --bind 127.0.0.1 >/tmp/dcx-http.log 2>&1 &
+          for _ in {1..20}; do curl -fsS http://127.0.0.1:4182/ >/dev/null && break; sleep 1; done
+          cat >/tmp/dcx-smoke.cjs <<'NODE'
+          const assert=require('assert');
+          const puppeteer=require(process.cwd()+'/node_modules/puppeteer-core');
+          const operator={id:'00000000-0000-4000-8000-000000003510',name:'Operador DCX',role:'operator',active:true};
+          (async()=>{
+            const browser=await puppeteer.launch({headless:true,executablePath:'/usr/bin/google-chrome',args:['--no-sandbox']});
+            for(const v of [{n:'desktop',w:1366,h:768},{n:'tablet',w:768,h:1024},{n:'mobile',w:390,h:844}]){
+              const page=await browser.newPage();
+              const errors=[]; page.on('pageerror',e=>errors.push(String(e)));
+              await page.setViewport({width:v.w,height:v.h});
+              await page.evaluateOnNewDocument(op=>{
+                localStorage.setItem('matchEquipos.operatorAccess.v1',JSON.stringify({version:1,operators:[{...op,cloud:true,pinHash:'test'}]}));
+                sessionStorage.setItem('matchEquipos.activeOperator.v1',op.id);
+                sessionStorage.setItem('matchEquipos.cloudOperatorSession.v1',JSON.stringify({operator:op,offline:true}));
+              },operator);
+              await page.setRequestInterception(true);
+              page.on('request',r=>{
+                const url=r.url();
+                if(url.includes('/rpc/core_list_operators_service')) r.respond({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({ok:true,bootstrapped:true,operators:[operator]})});
+                else if(/^https:\/\/(?:cdn\.jsdelivr\.net|cdn\.sheetjs\.com)/.test(url)) r.respond({status:200,contentType:'application/javascript',body:'window.XLSX=window.XLSX||{};'});
+                else if(url.startsWith('https://yvlayxmhcngdqribcmkh.supabase.co/')) r.respond({status:400,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:'{"ok":false}'});
+                else r.continue();
+              });
+              await page.goto('http://127.0.0.1:4182/?dcx='+v.n,{waitUntil:'domcontentloaded',timeout:15000});
+              await page.waitForFunction(()=>window.DCX3510Registry?.version==='20260922-dcx1',{timeout:6000});
+              const ui=await page.evaluate(()=>{
+                const p=document.querySelector('#dcx3510Panel'),r=p?.getBoundingClientRect();
+                return {visible:!!r&&r.width>0&&r.height>0,inert:p?.hasAttribute('inert')||false,box:window.DCX3510Registry.boxCapacity};
+              });
+              assert.deepStrictEqual(ui,{visible:true,inert:false,box:8});
+              assert.deepStrictEqual(errors,[]);
+              await page.close();
+            }
+            await browser.close();
+            console.log('DCX3510_BROWSER_OK desktop tablet mobile');
+          })().catch(e=>{console.error(e);process.exit(1);});
+          NODE
+          node /tmp/dcx-smoke.cjs
