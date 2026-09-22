@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION='20260922-dcx1';
+  const VERSION='20260922-dcx2';
   const MODEL='DCX3510-M';
   const BOX_CAPACITY=8;
   const ASSIGNMENTS=['08','98','79','99'];
@@ -11,14 +11,14 @@
   const norm=v=>String(v??'').trim().replace(/\s+/g,' ');
   const upper=v=>norm(v).toUpperCase();
   const digits=v=>String(v??'').replace(/\D/g,'');
-  const normalizeMac=v=>upper(v).replace(/[^0-9A-F]/g,'').slice(0,12);
-  const normalizeHost=v=>upper(v).replace(/[^A-Z0-9]/g,'').slice(0,20);
-  const normalizeCardSn=v=>upper(v).replace(/[^A-Z0-9]/g,'').slice(0,24);
-  const normalizeMcardUa=v=>digits(v).slice(0,16);
+  const normalizeMac=v=>upper(v).replace(/[\s:-]/g,'');
+  const normalizeHost=v=>upper(v).replace(/[\s-]/g,'');
+  const normalizeCardSn=v=>upper(v).replace(/[\s-]/g,'');
+  const normalizeMcardUa=v=>digits(v);
   const validMac=v=>/^[0-9A-F]{12}$/.test(normalizeMac(v));
-  const validHost=v=>/^M[A-Z0-9]{11}$/.test(normalizeHost(v));
-  const validCardSn=v=>/^[A-Z0-9]{8,24}$/.test(normalizeCardSn(v));
-  const validMcardUa=v=>/^0000\d{12}$/.test(normalizeMcardUa(v));
+  const validHost=v=>/^M\d[A-Z0-9]{10}$/.test(normalizeHost(v));
+  const validCardSn=v=>/^(?:MA|MT)[A-Z0-9]{10}$/.test(normalizeCardSn(v));
+  const validMcardUa=v=>/^00000\d{11}$/.test(normalizeMcardUa(v));
 
   function assignmentFromProcedencia(v){
     const m=upper(v).match(/(?:^|\D)(08|98|79|99)(?:\D|$)/);
@@ -142,11 +142,11 @@
     <div class="dcx3510-box-indicator"><span>Caja actual</span><strong id="dcx3510BoxCount">0 / 8</strong><small id="dcx3510BoxLabel">Asignación 08 · Caja 01</small></div>
   </div>
   <div class="dcx3510-entry-grid">
-    <label><span>MCARD SN</span><input id="dcx3510McardSn" class="equipment-code" autocomplete="off" placeholder="MT1332TP6620" maxlength="24"></label>
-    <label><span>MCARD UA <small>0000 + 12 dígitos</small></span><input id="dcx3510McardUa" class="equipment-code" inputmode="numeric" autocomplete="off" placeholder="0000086989871111" maxlength="16"></label>
-    <label><span>HOST SN <small>Se compara con Serial del Excel</small></span><input id="dcx3510HostSn" class="equipment-code" autocomplete="off" placeholder="M11334TC7794" maxlength="20"></label>
-    <label><span>eSTB MAC <small>12 hex</small></span><input id="dcx3510EstbMac" class="equipment-code" autocomplete="off" placeholder="F80BBE59F24A" maxlength="17"></label>
-    <label><span>DOCSIS MAC <small>12 hex</small></span><input id="dcx3510DocsisMac" class="equipment-code" autocomplete="off" placeholder="DC45179C7D56" maxlength="17"></label>
+    <label><span>MCARD SN <small>MA/MT + 10 alfanuméricos · 12 total</small></span><input id="dcx3510McardSn" class="equipment-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MT1332TP6620" maxlength="12"></label>
+    <label><span>MCARD UA <small>00000 + 11 dígitos · 16 total</small></span><input id="dcx3510McardUa" class="equipment-code" inputmode="numeric" autocomplete="off" placeholder="0000086989871111" maxlength="16"></label>
+    <label><span>HOST SN <small>M + dígito + 10 alfanuméricos · 12 total</small></span><input id="dcx3510HostSn" class="equipment-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="M11334TC7794" maxlength="12"></label>
+    <label><span>eSTB MAC <small>12 hex · 0–9 / A–F</small></span><input id="dcx3510EstbMac" class="equipment-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="F80BBE59F24A" maxlength="12"></label>
+    <label><span>DOCSIS MAC <small>12 hex · 0–9 / A–F</small></span><input id="dcx3510DocsisMac" class="equipment-code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="DC45179C7D56" maxlength="12"></label>
     <button id="dcx3510AddBtn" type="button" class="primary equipment-add-btn">Registrar equipo</button>
   </div>
   <div id="dcx3510Validation" class="equipment-validation neutral"><span class="equipment-validation-icon">✓</span><div><strong>Listo para registrar</strong><small>Selecciona 08, 98, 79 o 99. Cada caja se completa automáticamente al llegar a 8 equipos.</small></div></div>
@@ -187,19 +187,32 @@
       scheduleSave();renderBox();
     });
     const fields=[
-      ['#dcx3510McardSn',normalizeCardSn],
-      ['#dcx3510McardUa',normalizeMcardUa],
-      ['#dcx3510HostSn',normalizeHost],
-      ['#dcx3510EstbMac',v=>upper(v).replace(/[^0-9A-F:-]/g,'').slice(0,17)],
-      ['#dcx3510DocsisMac',v=>upper(v).replace(/[^0-9A-F:-]/g,'').slice(0,17)]
+      {selector:'#dcx3510McardSn',cleaner:normalizeCardSn,valid:validCardSn,title:'MCARD SN inválido',detail:'Debe comenzar por MA o MT y tener exactamente 12 caracteres.'},
+      {selector:'#dcx3510McardUa',cleaner:normalizeMcardUa,valid:validMcardUa,title:'MCARD UA inválido',detail:'Debe tener 16 dígitos y comenzar por cinco ceros: 00000.'},
+      {selector:'#dcx3510HostSn',cleaner:normalizeHost,valid:validHost,title:'HOST SN inválido',detail:'Debe tener 12 caracteres: M + un dígito + 10 letras/números.'},
+      {selector:'#dcx3510EstbMac',cleaner:normalizeMac,valid:validMac,title:'eSTB MAC inválido',detail:'Debe contener exactamente 12 caracteres hexadecimales: 0-9 y A-F.'},
+      {selector:'#dcx3510DocsisMac',cleaner:normalizeMac,valid:validMac,title:'DOCSIS MAC inválido',detail:'Debe contener exactamente 12 caracteres hexadecimales: 0-9 y A-F.'}
     ];
-    fields.forEach(([s,cleaner],i)=>{
-      const el=$(s);if(!el)return;
-      el.addEventListener('input',()=>{el.value=cleaner(el.value);});
+    fields.forEach((field,i)=>{
+      const el=$(field.selector);if(!el)return;
+      el.addEventListener('input',()=>{el.value=field.cleaner(el.value);});
       el.addEventListener('keydown',e=>{
         if(e.key!=='Enter')return;
         e.preventDefault();
-        if(i<fields.length-1)$(fields[i+1][0])?.focus();else registerCurrent();
+        const cleaned=field.cleaner(el.value);
+        el.value=cleaned;
+        if(!field.valid(cleaned)){
+          el.value='';
+          setValidation(field.title,field.detail,'error');
+          toast(field.title,field.detail,'error');
+          requestAnimationFrame(()=>{
+            el.focus({preventScroll:true});
+            try{el.setSelectionRange(0,0);}catch{}
+          });
+          return;
+        }
+        if(i<fields.length-1)$(fields[i+1].selector)?.focus({preventScroll:true});
+        else registerCurrent();
       });
     });
     $('#dcx3510Body')?.addEventListener('click',e=>{
@@ -247,11 +260,12 @@
   function errorFor(v){
     if(!ASSIGNMENTS.includes(v.assignment))return ['Asignación inválida','Selecciona 08, 98, 79 o 99.'];
     if(!/^\d{1,5}$/.test(v.requestedBox))return ['Caja inválida','Escribe un número de caja válido.'];
-    if(!validCardSn(v.mcardSn))return ['MCARD SN inválido','Debe ser alfanumérico.'];
-    if(!validMcardUa(v.mcardUa))return ['MCARD UA inválido','Debe tener 16 dígitos y comenzar por 0000.'];
-    if(!validHost(v.hostSn))return ['HOST SN inválido','Debe comenzar por M y contener solo letras/números.'];
-    if(!validMac(v.estbMac))return ['eSTB MAC inválido','Debe contener 12 caracteres hexadecimales.'];
-    if(!validMac(v.docsisMac))return ['DOCSIS MAC inválido','Debe contener 12 caracteres hexadecimales.'];
+    if(!validCardSn(v.mcardSn))return ['MCARD SN inválido','Debe comenzar por MA o MT y tener exactamente 12 caracteres.'];
+    if(!validMcardUa(v.mcardUa))return ['MCARD UA inválido','Debe tener 16 dígitos y comenzar por cinco ceros: 00000.'];
+    if(!validHost(v.hostSn))return ['HOST SN inválido','Debe tener 12 caracteres: M + un dígito + 10 letras/números.'];
+    if(!validMac(v.estbMac))return ['eSTB MAC inválido','Debe contener exactamente 12 caracteres hexadecimales: 0-9 y A-F.'];
+    if(!validMac(v.docsisMac))return ['DOCSIS MAC inválido','Debe contener exactamente 12 caracteres hexadecimales: 0-9 y A-F.'];
+    if(v.estbMac===v.docsisMac)return ['MAC duplicada en el equipo','eSTB MAC y DOCSIS MAC deben ser diferentes.'];
     for(const [label,key] of [['HOST SN','hostSn'],['MCARD SN','mcardSn'],['MCARD UA','mcardUa'],['eSTB MAC','estbMac'],['DOCSIS MAC','docsisMac']]){
       const old=state.records.find(r=>r[key]===v[key]);
       if(old)return [`${label} duplicado`,`${v[key]} ya está registrado en Asignación ${old.assignment}, Caja ${old.box}.`];

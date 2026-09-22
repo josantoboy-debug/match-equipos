@@ -2,7 +2,7 @@ name: DCX3510 registry gate
 
 on:
   push:
-    branches: [repair/dcx3510-registry-20260922]
+    branches: [repair/dcx3510-field-validation-20260922]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -33,7 +33,7 @@ jobs:
               path=ref.split('?',1)[0].split('#',1)[0]
               if path and not Path(path).exists(): missing.append(path)
           assert not missing, missing
-          for marker in ('data-dcx3510-version="20260922-dcx1"','dcx3510-register.css?v=20260922-dcx1','dcx3510-register.js?v=20260922-dcx1'):
+          for marker in ('data-dcx3510-version="20260922-dcx2"','dcx3510-register.css?v=20260922-dcx1','dcx3510-register.js?v=20260922-dcx2'):
               assert marker in html, marker
           print('DCX3510_REFS_OK')
           PY
@@ -46,6 +46,13 @@ jobs:
           assert.strictEqual(u.validHost('M11334TC7794'),true);
           assert.strictEqual(u.validHost('M11334TC779'),false);
           assert.strictEqual(u.validMcardUa('0000086989871111'),true);
+          assert.strictEqual(u.validMcardUa('0000123456789012'),false);
+          assert.strictEqual(u.validCardSn('MT1332TP6620'),true);
+          assert.strictEqual(u.validCardSn('MA1234AB5678'),true);
+          assert.strictEqual(u.validCardSn('M11332TC7937'),false);
+          assert.strictEqual(u.validHost('MT1332TP6620'),false);
+          assert.strictEqual(u.validMac('F80BBE59F24A'),true);
+          assert.strictEqual(u.validMac('DC45179C7D56'),true);
           const parsed=u.parseBaseRows([
             ['Fecha','Procedencia','N','Modelo','Serial'],
             ['21-09-2026','Puerto Rico 08','1','DCX3510-M','M11334TC7794']
@@ -92,12 +99,44 @@ jobs:
                 else r.continue();
               });
               await page.goto('http://127.0.0.1:4182/?dcx='+v.n,{waitUntil:'domcontentloaded',timeout:15000});
-              await page.waitForFunction(()=>window.DCX3510Registry?.version==='20260922-dcx1',{timeout:6000});
+              await page.waitForFunction(()=>window.DCX3510Registry?.version==='20260922-dcx2',{timeout:6000});
               const ui=await page.evaluate(()=>{
                 const p=document.querySelector('#dcx3510Panel'),r=p?.getBoundingClientRect();
                 return {visible:!!r&&r.width>0&&r.height>0,inert:p?.hasAttribute('inert')||false,box:window.DCX3510Registry.boxCapacity};
               });
               assert.deepStrictEqual(ui,{visible:true,inert:false,box:8});
+              if(v.n==='desktop'){
+                const fieldFlow=await page.evaluate(async()=>{
+                  const pressEnter=async(id,value)=>{
+                    const el=document.getElementById(id);el.focus();el.value=value;
+                    el.dispatchEvent(new Event('input',{bubbles:true}));
+                    el.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+                    await new Promise(r=>requestAnimationFrame(()=>r()));
+                    return {value:el.value,active:document.activeElement.id};
+                  };
+                  const wrongCard=await pressEnter('dcx3510McardSn','M11332TC7937');
+                  const goodCard=await pressEnter('dcx3510McardSn','MT1332TP6620');
+                  const wrongUa=await pressEnter('dcx3510McardUa','0000123456789012');
+                  const goodUa=await pressEnter('dcx3510McardUa','0000086989871111');
+                  const wrongHost=await pressEnter('dcx3510HostSn','MT1332TP6620');
+                  const goodHost=await pressEnter('dcx3510HostSn','M11332TC7937');
+                  const wrongMac=await pressEnter('dcx3510EstbMac','MT1332TP6620');
+                  const goodMac=await pressEnter('dcx3510EstbMac','F80BBE59F24A');
+                  return {wrongCard,goodCard,wrongUa,goodUa,wrongHost,goodHost,wrongMac,goodMac};
+                });
+                assert.strictEqual(fieldFlow.wrongCard.value,'');
+                assert.strictEqual(fieldFlow.wrongCard.active,'dcx3510McardSn');
+                assert.strictEqual(fieldFlow.goodCard.active,'dcx3510McardUa');
+                assert.strictEqual(fieldFlow.wrongUa.value,'');
+                assert.strictEqual(fieldFlow.wrongUa.active,'dcx3510McardUa');
+                assert.strictEqual(fieldFlow.goodUa.active,'dcx3510HostSn');
+                assert.strictEqual(fieldFlow.wrongHost.value,'');
+                assert.strictEqual(fieldFlow.wrongHost.active,'dcx3510HostSn');
+                assert.strictEqual(fieldFlow.goodHost.active,'dcx3510EstbMac');
+                assert.strictEqual(fieldFlow.wrongMac.value,'');
+                assert.strictEqual(fieldFlow.wrongMac.active,'dcx3510EstbMac');
+                assert.strictEqual(fieldFlow.goodMac.active,'dcx3510DocsisMac');
+              }
               assert.deepStrictEqual(errors,[]);
               await page.close();
             }
