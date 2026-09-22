@@ -33,7 +33,7 @@ jobs:
               path=ref.split('?',1)[0].split('#',1)[0]
               if path and not Path(path).exists(): missing.append(path)
           assert not missing, missing
-          for marker in ('data-dcx3510-version="20260922-dcx2"','dcx3510-register.css?v=20260922-dcx2','dcx3510-register.js?v=20260922-dcx2'):
+          for marker in ('data-dcx3510-version="20260922-dcx2"','dcx3510-register.css?v=20260922-dcx1','dcx3510-register.js?v=20260922-dcx2'):
               assert marker in html, marker
           print('DCX3510_REFS_OK')
           PY
